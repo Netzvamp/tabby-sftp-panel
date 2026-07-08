@@ -1,0 +1,323 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language: ru-RU\n"
+
+# --- Spine / toolbar ---
+msgid "SFTP Panel — hover to open"
+msgstr "SFTP Panel — наведите для открытия"
+
+msgid "Click to edit path"
+msgstr "Нажмите, чтобы изменить путь"
+
+msgid "Unpin (overlay)"
+msgstr "Открепить (поверх)"
+
+msgid "Pin panel (dock)"
+msgstr "Закрепить панель (док)"
+
+msgid "Refresh"
+msgstr "Обновить"
+
+msgid "New file"
+msgstr "Новый файл"
+
+msgid "Hide dotfiles"
+msgstr "Скрыть скрытые файлы"
+
+msgid "Show dotfiles"
+msgstr "Показать скрытые файлы"
+
+msgid "Upload files"
+msgstr "Загрузить файлы"
+
+msgid "Upload folder"
+msgstr "Загрузить папку"
+
+msgid "Filter..."
+msgstr "Фильтр..."
+
+# --- List states ---
+msgid "Connecting…"
+msgstr "Подключение…"
+
+msgid "Loading…"
+msgstr "Загрузка…"
+
+msgid "No files match \"{filter}\""
+msgstr "Нет файлов по запросу «{filter}»"
+
+msgid "items"
+msgstr "элементов"
+
+msgid "selected"
+msgstr "выбрано"
+
+# --- Log section ---
+msgid "Log"
+msgstr "Журнал"
+
+msgid "Clear all"
+msgstr "Очистить всё"
+
+msgid "No log entries"
+msgstr "Нет записей журнала"
+
+msgid "Stop"
+msgstr "Стоп"
+
+# --- Column headers ---
+msgid "Size"
+msgstr "Размер"
+
+msgid "Modified"
+msgstr "Изменён"
+
+msgid "Owner"
+msgstr "Владелец"
+
+msgid "Permissions"
+msgstr "Права"
+
+# --- Context menu ---
+msgid "Open"
+msgstr "Открыть"
+
+msgid "Open with default app"
+msgstr "Открыть в приложении по умолчанию"
+
+msgid "Rename…"
+msgstr "Переименовать…"
+
+msgid "Copy / Move…"
+msgstr "Копировать / Переместить…"
+
+msgid "Copy path"
+msgstr "Копировать путь"
+
+msgid "Permissions…"
+msgstr "Права…"
+
+msgid "Create file…"
+msgstr "Создать файл…"
+
+msgid "Create directory…"
+msgstr "Создать каталог…"
+
+# --- Prompt / dialog labels ---
+msgid "New directory name"
+msgstr "Имя нового каталога"
+
+msgid "New file name"
+msgstr "Имя нового файла"
+
+msgid "Rename to"
+msgstr "Переименовать в"
+
+msgid "Overwrite"
+msgstr "Перезаписать"
+
+msgid "Overwrite all"
+msgstr "Перезаписать все"
+
+msgid "Skip"
+msgstr "Пропустить"
+
+msgid "Skip all"
+msgstr "Пропустить все"
+
+msgid "This file is large ({size}) and may be binary. Open it in the editor anyway?"
+msgstr "Файл большой ({size}) и может быть двоичным. Всё равно открыть в редакторе?"
+
+msgid "{target} already exists on the server."
+msgstr "{target} уже существует на сервере."
+
+msgid "Delete {n} item(s)?"
+msgstr "Удалить {n} элемент(ов)?"
+
+# --- Log / notification messages ---
+msgid "Could not open SFTP"
+msgstr "Не удалось открыть SFTP"
+
+msgid "Cannot open {path}"
+msgstr "Не удалось открыть {path}"
+
+msgid "Copy failed"
+msgstr "Ошибка копирования"
+
+msgid "Could not open {name}"
+msgstr "Не удалось открыть {name}"
+
+msgid "Could not read folder permissions"
+msgstr "Не удалось прочитать права папки"
+
+msgid "Directory created"
+msgstr "Каталог создан"
+
+msgid "Could not create directory"
+msgstr "Не удалось создать каталог"
+
+msgid "File created: {name}"
+msgstr "Файл создан: {name}"
+
+msgid "Could not create file: {name}"
+msgstr "Не удалось создать файл: {name}"
+
+msgid "Renamed {old} → {new}"
+msgstr "Переименовано {old} → {new}"
+
+msgid "Rename failed: {name}"
+msgstr "Ошибка переименования: {name}"
+
+msgid "Move failed on {n} item(s)"
+msgstr "Ошибка перемещения для {n} элемент(ов)"
+
+msgid "Moved {n} item(s) to {dest}"
+msgstr "Перемещено {n} элемент(ов) в {dest}"
+
+msgid "Copied {n} item(s) to {dest}"
+msgstr "Скопировано {n} элемент(ов) в {dest}"
+
+msgid "Drag-out unavailable"
+msgstr "Перетаскивание недоступно"
+
+msgid "Drop folder not found — saving to Downloads"
+msgstr "Папка назначения не найдена — сохранение в Загрузки"
+
+msgid "Drag-out failed"
+msgstr "Ошибка перетаскивания"
+
+msgid "Checking existing files…"
+msgstr "Проверка существующих файлов…"
+
+msgid "Download folder failed: {name}"
+msgstr "Не удалось скачать папку: {name}"
+
+msgid "Deleting {name}…"
+msgstr "Удаление {name}…"
+
+msgid "Deleting {name}… ({count} items)"
+msgstr "Удаление {name}… ({count} элем.)"
+
+msgid "Deleted {name}"
+msgstr "Удалено {name}"
+
+msgid "Deleted {name} ({count} items)"
+msgstr "Удалено {name} ({count} элем.)"
+
+msgid "Delete failed: {name}"
+msgstr "Ошибка удаления: {name}"
+
+msgid "chown failed on {n} item(s)"
+msgstr "chown не удался для {n} элемент(ов)"
+
+msgid "chmod failed on {n} item(s)"
+msgstr "chmod не удался для {n} элемент(ов)"
+
+msgid "Permissions updated"
+msgstr "Права обновлены"
+
+msgid "Changing permissions… ({done}/{total})"
+msgstr "Изменение прав… ({done}/{total})"
+
+msgid "Changing ownership… ({done}/{total})"
+msgstr "Изменение владельца… ({done}/{total})"
+
+msgid "Ownership updated"
+msgstr "Владелец обновлён"
+
+msgid "Scanning folder… ({count})"
+msgstr "Сканирование папки… ({count})"
+
+msgid "Cancelled"
+msgstr "Отменено"
+
+msgid "Cancelled — {done}/{total} changed"
+msgstr "Отменено — изменено {done}/{total}"
+
+# --- chmod dialog ---
+msgid "Read"
+msgstr "Чтение"
+
+msgid "Write"
+msgstr "Запись"
+
+msgid "Exec"
+msgstr "Выполнение"
+
+msgid "Octal"
+msgstr "Восьмеричный"
+
+msgid "Other"
+msgstr "Остальные"
+
+msgid "Apply recursively to folder contents"
+msgstr "Применить рекурсивно к содержимому папки"
+
+msgid "The mode is applied literally to both files and folders."
+msgstr "Режим применяется как есть к файлам и папкам."
+
+# --- copy/move dialog ---
+msgid "Copy / Move"
+msgstr "Копировать / Переместить"
+
+msgid "Destination directory"
+msgstr "Каталог назначения"
+
+msgid "Move"
+msgstr "Переместить"
+
+# --- settings ---
+msgid "When you open a file (double-click)"
+msgstr "При открытии файла (двойной щелчок)"
+
+msgid "Start folder"
+msgstr "Начальная папка"
+
+msgid "Folder the panel opens on connect. Absolute path (e.g. /var/www), or ~ for your home directory."
+msgstr "Папка, которую панель открывает при подключении. Абсолютный путь (например, /var/www) или ~ для домашнего каталога."
+
+msgid "Use a default editor for opening files"
+msgstr "Использовать редактор по умолчанию для открытия файлов"
+
+msgid "Off: files open with the OS default app (normal Tabby behavior). On: pick one editor used for every file you open. Turning this on tries to auto-detect your editor (Windows only); you can also Browse or type the path. A blank path behaves like \"off\"."
+msgstr "Выкл: файлы открываются приложением ОС по умолчанию (обычное поведение Tabby). Вкл: выберите один редактор для всех открываемых файлов. При включении выполняется попытка автоопределения редактора (только Windows); также можно выбрать или ввести путь. Пустой путь равнозначен «выкл»."
+
+msgid "Editor path"
+msgstr "Путь к редактору"
+
+msgid "Executable used for every file you open. Blank = OS default app."
+msgstr "Исполняемый файл для всех открываемых файлов. Пусто = приложение ОС по умолчанию."
+
+msgid "(blank = OS default)"
+msgstr "(пусто = по умолчанию ОС)"
+
+msgid "Browse…"
+msgstr "Обзор…"
+
+msgid "Warn when opening large files"
+msgstr "Предупреждать при открытии больших файлов"
+
+msgid "Show a confirmation before opening a file larger than this many MB in the editor (guards against mis-clicking a binary). 0 = never warn."
+msgstr "Показывать подтверждение перед открытием в редакторе файла больше указанного числа МБ (защита от случайного клика по двоичному файлу). 0 = не предупреждать."
+
+msgid "Panel side"
+msgstr "Сторона панели"
+
+msgid "Auto-show log on activity"
+msgstr "Автопоказ журнала при активности"
+
+msgid "Reveals the log list at the bottom of the panel whenever a transfer starts or a message is logged. While the list is shown, the Tabby transfers popup is hidden."
+msgstr "Показывает список журнала внизу панели при начале передачи или записи сообщения. Пока список показан, собственное всплывающее окно передач Tabby скрыто."
+
+msgid "Toggle hotkey"
+msgstr "Горячая клавиша переключения"
+
+msgid "Set under Settings → Hotkeys → \"Focus SFTP Panel\""
+msgstr "Задаётся в Настройки → Горячие клавиши → «Фокус на SFTP Panel»"
+
+msgid "Show vertical label on collapsed strip"
+msgstr "Показывать вертикальную подпись на свёрнутой полосе"
+
+msgid "The \"SFTP Panel\" text on the hover strip (unpinned). Off makes the strip thinner."
+msgstr "Текст \"SFTP Panel\" на полосе при наведении (без закрепления). Выкл. делает полосу тоньше."

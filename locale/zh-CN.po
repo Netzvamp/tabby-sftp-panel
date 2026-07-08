@@ -1,0 +1,323 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language: zh-CN\n"
+
+# --- Spine / toolbar ---
+msgid "SFTP Panel — hover to open"
+msgstr "SFTP Panel — 悬停以打开"
+
+msgid "Click to edit path"
+msgstr "点击编辑路径"
+
+msgid "Unpin (overlay)"
+msgstr "取消固定（浮层）"
+
+msgid "Pin panel (dock)"
+msgstr "固定面板（停靠）"
+
+msgid "Refresh"
+msgstr "刷新"
+
+msgid "New file"
+msgstr "新建文件"
+
+msgid "Hide dotfiles"
+msgstr "隐藏隐藏文件"
+
+msgid "Show dotfiles"
+msgstr "显示隐藏文件"
+
+msgid "Upload files"
+msgstr "上传文件"
+
+msgid "Upload folder"
+msgstr "上传文件夹"
+
+msgid "Filter..."
+msgstr "筛选..."
+
+# --- List states ---
+msgid "Connecting…"
+msgstr "连接中…"
+
+msgid "Loading…"
+msgstr "加载中…"
+
+msgid "No files match \"{filter}\""
+msgstr "没有匹配 “{filter}” 的文件"
+
+msgid "items"
+msgstr "项"
+
+msgid "selected"
+msgstr "已选择"
+
+# --- Log section ---
+msgid "Log"
+msgstr "日志"
+
+msgid "Clear all"
+msgstr "全部清除"
+
+msgid "No log entries"
+msgstr "无日志条目"
+
+msgid "Stop"
+msgstr "停止"
+
+# --- Column headers ---
+msgid "Size"
+msgstr "大小"
+
+msgid "Modified"
+msgstr "修改时间"
+
+msgid "Owner"
+msgstr "所有者"
+
+msgid "Permissions"
+msgstr "权限"
+
+# --- Context menu ---
+msgid "Open"
+msgstr "打开"
+
+msgid "Open with default app"
+msgstr "用默认应用打开"
+
+msgid "Rename…"
+msgstr "重命名…"
+
+msgid "Copy / Move…"
+msgstr "复制 / 移动…"
+
+msgid "Copy path"
+msgstr "复制路径"
+
+msgid "Permissions…"
+msgstr "权限…"
+
+msgid "Create file…"
+msgstr "创建文件…"
+
+msgid "Create directory…"
+msgstr "创建目录…"
+
+# --- Prompt / dialog labels ---
+msgid "New directory name"
+msgstr "新目录名称"
+
+msgid "New file name"
+msgstr "新文件名称"
+
+msgid "Rename to"
+msgstr "重命名为"
+
+msgid "Overwrite"
+msgstr "覆盖"
+
+msgid "Overwrite all"
+msgstr "全部覆盖"
+
+msgid "Skip"
+msgstr "跳过"
+
+msgid "Skip all"
+msgstr "全部跳过"
+
+msgid "This file is large ({size}) and may be binary. Open it in the editor anyway?"
+msgstr "此文件较大（{size}），可能是二进制文件。仍要在编辑器中打开吗？"
+
+msgid "{target} already exists on the server."
+msgstr "{target} 已存在于服务器上。"
+
+msgid "Delete {n} item(s)?"
+msgstr "删除 {n} 个项目？"
+
+# --- Log / notification messages ---
+msgid "Could not open SFTP"
+msgstr "无法打开 SFTP"
+
+msgid "Cannot open {path}"
+msgstr "无法打开 {path}"
+
+msgid "Copy failed"
+msgstr "复制失败"
+
+msgid "Could not open {name}"
+msgstr "无法打开 {name}"
+
+msgid "Could not read folder permissions"
+msgstr "无法读取文件夹权限"
+
+msgid "Directory created"
+msgstr "已创建目录"
+
+msgid "Could not create directory"
+msgstr "无法创建目录"
+
+msgid "File created: {name}"
+msgstr "已创建文件：{name}"
+
+msgid "Could not create file: {name}"
+msgstr "无法创建文件：{name}"
+
+msgid "Renamed {old} → {new}"
+msgstr "已重命名 {old} → {new}"
+
+msgid "Rename failed: {name}"
+msgstr "重命名失败：{name}"
+
+msgid "Move failed on {n} item(s)"
+msgstr "{n} 个项目移动失败"
+
+msgid "Moved {n} item(s) to {dest}"
+msgstr "已将 {n} 个项目移动到 {dest}"
+
+msgid "Copied {n} item(s) to {dest}"
+msgstr "已将 {n} 个项目复制到 {dest}"
+
+msgid "Drag-out unavailable"
+msgstr "拖出功能不可用"
+
+msgid "Drop folder not found — saving to Downloads"
+msgstr "未找到目标文件夹 — 保存到下载文件夹"
+
+msgid "Drag-out failed"
+msgstr "拖出失败"
+
+msgid "Checking existing files…"
+msgstr "正在检查现有文件…"
+
+msgid "Download folder failed: {name}"
+msgstr "下载文件夹失败：{name}"
+
+msgid "Deleting {name}…"
+msgstr "正在删除 {name}…"
+
+msgid "Deleting {name}… ({count} items)"
+msgstr "正在删除 {name}…（{count} 个项目）"
+
+msgid "Deleted {name}"
+msgstr "已删除 {name}"
+
+msgid "Deleted {name} ({count} items)"
+msgstr "已删除 {name}（{count} 个项目）"
+
+msgid "Delete failed: {name}"
+msgstr "删除失败：{name}"
+
+msgid "chown failed on {n} item(s)"
+msgstr "{n} 个项目的 chown 失败"
+
+msgid "chmod failed on {n} item(s)"
+msgstr "{n} 个项目的 chmod 失败"
+
+msgid "Permissions updated"
+msgstr "权限已更新"
+
+msgid "Changing permissions… ({done}/{total})"
+msgstr "正在更改权限… ({done}/{total})"
+
+msgid "Changing ownership… ({done}/{total})"
+msgstr "正在更改所有者… ({done}/{total})"
+
+msgid "Ownership updated"
+msgstr "所有者已更新"
+
+msgid "Scanning folder… ({count})"
+msgstr "正在扫描文件夹… ({count})"
+
+msgid "Cancelled"
+msgstr "已取消"
+
+msgid "Cancelled — {done}/{total} changed"
+msgstr "已取消 — 已更改 {done}/{total}"
+
+# --- chmod dialog ---
+msgid "Read"
+msgstr "读取"
+
+msgid "Write"
+msgstr "写入"
+
+msgid "Exec"
+msgstr "执行"
+
+msgid "Octal"
+msgstr "八进制"
+
+msgid "Other"
+msgstr "其他"
+
+msgid "Apply recursively to folder contents"
+msgstr "递归应用到文件夹内容"
+
+msgid "The mode is applied literally to both files and folders."
+msgstr "该模式将原样应用于文件和文件夹。"
+
+# --- copy/move dialog ---
+msgid "Copy / Move"
+msgstr "复制 / 移动"
+
+msgid "Destination directory"
+msgstr "目标目录"
+
+msgid "Move"
+msgstr "移动"
+
+# --- settings ---
+msgid "When you open a file (double-click)"
+msgstr "打开文件时（双击）"
+
+msgid "Start folder"
+msgstr "起始文件夹"
+
+msgid "Folder the panel opens on connect. Absolute path (e.g. /var/www), or ~ for your home directory."
+msgstr "面板连接时打开的文件夹。绝对路径（例如 /var/www），或用 ~ 表示您的主目录。"
+
+msgid "Use a default editor for opening files"
+msgstr "使用默认编辑器打开文件"
+
+msgid "Off: files open with the OS default app (normal Tabby behavior). On: pick one editor used for every file you open. Turning this on tries to auto-detect your editor (Windows only); you can also Browse or type the path. A blank path behaves like \"off\"."
+msgstr "关闭：文件使用操作系统的默认应用打开（Tabby 的正常行为）。开启：选择一个用于打开每个文件的编辑器。开启时会尝试自动检测您的编辑器（仅限 Windows）；您也可以浏览或输入路径。留空路径等同于“关闭”。"
+
+msgid "Editor path"
+msgstr "编辑器路径"
+
+msgid "Executable used for every file you open. Blank = OS default app."
+msgstr "用于打开每个文件的可执行程序。留空 = 操作系统默认应用。"
+
+msgid "(blank = OS default)"
+msgstr "（留空 = 操作系统默认）"
+
+msgid "Browse…"
+msgstr "浏览…"
+
+msgid "Warn when opening large files"
+msgstr "打开大文件时警告"
+
+msgid "Show a confirmation before opening a file larger than this many MB in the editor (guards against mis-clicking a binary). 0 = never warn."
+msgstr "在编辑器中打开大于此 MB 数的文件前显示确认（防止误点二进制文件）。0 = 从不警告。"
+
+msgid "Panel side"
+msgstr "面板位置"
+
+msgid "Auto-show log on activity"
+msgstr "有活动时自动显示日志"
+
+msgid "Reveals the log list at the bottom of the panel whenever a transfer starts or a message is logged. While the list is shown, the Tabby transfers popup is hidden."
+msgstr "每当传输开始或记录消息时，在面板底部显示日志列表。显示该列表时，Tabby 自带的传输弹窗将被隐藏。"
+
+msgid "Toggle hotkey"
+msgstr "切换快捷键"
+
+msgid "Set under Settings → Hotkeys → \"Focus SFTP Panel\""
+msgstr "在 设置 → 快捷键 → “聚焦 SFTP Panel” 中设置"
+
+msgid "Show vertical label on collapsed strip"
+msgstr "在折叠条上显示竖排标签"
+
+msgid "The \"SFTP Panel\" text on the hover strip (unpinned). Off makes the strip thinner."
+msgstr "悬停条（未固定）上的“SFTP Panel”文字。关闭后条更窄。"

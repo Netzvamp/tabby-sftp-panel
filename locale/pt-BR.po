@@ -1,0 +1,323 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language: pt-BR\n"
+
+# --- Spine / toolbar ---
+msgid "SFTP Panel — hover to open"
+msgstr "SFTP Panel — passe o mouse para abrir"
+
+msgid "Click to edit path"
+msgstr "Clique para editar o caminho"
+
+msgid "Unpin (overlay)"
+msgstr "Desafixar (sobreposição)"
+
+msgid "Pin panel (dock)"
+msgstr "Fixar painel (encaixar)"
+
+msgid "Refresh"
+msgstr "Atualizar"
+
+msgid "New file"
+msgstr "Novo arquivo"
+
+msgid "Hide dotfiles"
+msgstr "Ocultar arquivos ocultos"
+
+msgid "Show dotfiles"
+msgstr "Mostrar arquivos ocultos"
+
+msgid "Upload files"
+msgstr "Enviar arquivos"
+
+msgid "Upload folder"
+msgstr "Enviar pasta"
+
+msgid "Filter..."
+msgstr "Filtrar..."
+
+# --- List states ---
+msgid "Connecting…"
+msgstr "Conectando…"
+
+msgid "Loading…"
+msgstr "Carregando…"
+
+msgid "No files match \"{filter}\""
+msgstr "Nenhum arquivo corresponde a «{filter}»"
+
+msgid "items"
+msgstr "itens"
+
+msgid "selected"
+msgstr "selecionados"
+
+# --- Log section ---
+msgid "Log"
+msgstr "Registro"
+
+msgid "Clear all"
+msgstr "Limpar tudo"
+
+msgid "No log entries"
+msgstr "Nenhuma entrada de registro"
+
+msgid "Stop"
+msgstr "Parar"
+
+# --- Column headers ---
+msgid "Size"
+msgstr "Tamanho"
+
+msgid "Modified"
+msgstr "Modificado"
+
+msgid "Owner"
+msgstr "Proprietário"
+
+msgid "Permissions"
+msgstr "Permissões"
+
+# --- Context menu ---
+msgid "Open"
+msgstr "Abrir"
+
+msgid "Open with default app"
+msgstr "Abrir com o app padrão"
+
+msgid "Rename…"
+msgstr "Renomear…"
+
+msgid "Copy / Move…"
+msgstr "Copiar / Mover…"
+
+msgid "Copy path"
+msgstr "Copiar caminho"
+
+msgid "Permissions…"
+msgstr "Permissões…"
+
+msgid "Create file…"
+msgstr "Criar arquivo…"
+
+msgid "Create directory…"
+msgstr "Criar diretório…"
+
+# --- Prompt / dialog labels ---
+msgid "New directory name"
+msgstr "Nome do novo diretório"
+
+msgid "New file name"
+msgstr "Nome do novo arquivo"
+
+msgid "Rename to"
+msgstr "Renomear para"
+
+msgid "Overwrite"
+msgstr "Sobrescrever"
+
+msgid "Overwrite all"
+msgstr "Sobrescrever tudo"
+
+msgid "Skip"
+msgstr "Ignorar"
+
+msgid "Skip all"
+msgstr "Ignorar tudo"
+
+msgid "This file is large ({size}) and may be binary. Open it in the editor anyway?"
+msgstr "O arquivo é grande ({size}) e pode ser binário. Abrir mesmo assim no editor?"
+
+msgid "{target} already exists on the server."
+msgstr "{target} já existe no servidor."
+
+msgid "Delete {n} item(s)?"
+msgstr "Excluir {n} item(ns)?"
+
+# --- Log / notification messages ---
+msgid "Could not open SFTP"
+msgstr "Não foi possível abrir o SFTP"
+
+msgid "Cannot open {path}"
+msgstr "Não é possível abrir {path}"
+
+msgid "Copy failed"
+msgstr "Falha ao copiar"
+
+msgid "Could not open {name}"
+msgstr "Não foi possível abrir {name}"
+
+msgid "Could not read folder permissions"
+msgstr "Não foi possível ler as permissões da pasta"
+
+msgid "Directory created"
+msgstr "Diretório criado"
+
+msgid "Could not create directory"
+msgstr "Não foi possível criar o diretório"
+
+msgid "File created: {name}"
+msgstr "Arquivo criado: {name}"
+
+msgid "Could not create file: {name}"
+msgstr "Não foi possível criar o arquivo: {name}"
+
+msgid "Renamed {old} → {new}"
+msgstr "Renomeado {old} → {new}"
+
+msgid "Rename failed: {name}"
+msgstr "Falha ao renomear: {name}"
+
+msgid "Move failed on {n} item(s)"
+msgstr "Falha ao mover {n} item(ns)"
+
+msgid "Moved {n} item(s) to {dest}"
+msgstr "{n} item(ns) movido(s) para {dest}"
+
+msgid "Copied {n} item(s) to {dest}"
+msgstr "{n} item(ns) copiado(s) para {dest}"
+
+msgid "Drag-out unavailable"
+msgstr "Arrastar para fora indisponível"
+
+msgid "Drop folder not found — saving to Downloads"
+msgstr "Pasta de destino não encontrada — salvando em Downloads"
+
+msgid "Drag-out failed"
+msgstr "Falha ao arrastar para fora"
+
+msgid "Checking existing files…"
+msgstr "Verificando arquivos existentes…"
+
+msgid "Download folder failed: {name}"
+msgstr "Falha ao baixar a pasta: {name}"
+
+msgid "Deleting {name}…"
+msgstr "Excluindo {name}…"
+
+msgid "Deleting {name}… ({count} items)"
+msgstr "Excluindo {name}… ({count} itens)"
+
+msgid "Deleted {name}"
+msgstr "{name} excluído"
+
+msgid "Deleted {name} ({count} items)"
+msgstr "{name} excluído ({count} itens)"
+
+msgid "Delete failed: {name}"
+msgstr "Falha ao excluir: {name}"
+
+msgid "chown failed on {n} item(s)"
+msgstr "chown falhou em {n} item(ns)"
+
+msgid "chmod failed on {n} item(s)"
+msgstr "chmod falhou em {n} item(ns)"
+
+msgid "Permissions updated"
+msgstr "Permissões atualizadas"
+
+msgid "Changing permissions… ({done}/{total})"
+msgstr "Alterando permissões… ({done}/{total})"
+
+msgid "Changing ownership… ({done}/{total})"
+msgstr "Alterando proprietário… ({done}/{total})"
+
+msgid "Ownership updated"
+msgstr "Proprietário atualizado"
+
+msgid "Scanning folder… ({count})"
+msgstr "Verificando pasta… ({count})"
+
+msgid "Cancelled"
+msgstr "Cancelado"
+
+msgid "Cancelled — {done}/{total} changed"
+msgstr "Cancelado — {done}/{total} alterados"
+
+# --- chmod dialog ---
+msgid "Read"
+msgstr "Leitura"
+
+msgid "Write"
+msgstr "Escrita"
+
+msgid "Exec"
+msgstr "Execução"
+
+msgid "Octal"
+msgstr "Octal"
+
+msgid "Other"
+msgstr "Outros"
+
+msgid "Apply recursively to folder contents"
+msgstr "Aplicar recursivamente ao conteúdo da pasta"
+
+msgid "The mode is applied literally to both files and folders."
+msgstr "O modo é aplicado literalmente a arquivos e pastas."
+
+# --- copy/move dialog ---
+msgid "Copy / Move"
+msgstr "Copiar / Mover"
+
+msgid "Destination directory"
+msgstr "Diretório de destino"
+
+msgid "Move"
+msgstr "Mover"
+
+# --- settings ---
+msgid "When you open a file (double-click)"
+msgstr "Ao abrir um arquivo (clique duplo)"
+
+msgid "Start folder"
+msgstr "Pasta inicial"
+
+msgid "Folder the panel opens on connect. Absolute path (e.g. /var/www), or ~ for your home directory."
+msgstr "Pasta que o painel abre ao conectar. Caminho absoluto (ex.: /var/www) ou ~ para seu diretório pessoal."
+
+msgid "Use a default editor for opening files"
+msgstr "Usar um editor padrão para abrir arquivos"
+
+msgid "Off: files open with the OS default app (normal Tabby behavior). On: pick one editor used for every file you open. Turning this on tries to auto-detect your editor (Windows only); you can also Browse or type the path. A blank path behaves like \"off\"."
+msgstr "Desligado: os arquivos abrem com o app padrão do sistema (comportamento normal do Tabby). Ligado: escolha um editor usado para cada arquivo aberto. Ao ligar, tenta detectar seu editor automaticamente (somente Windows); você também pode procurar ou digitar o caminho. Um caminho vazio equivale a «desligado»."
+
+msgid "Editor path"
+msgstr "Caminho do editor"
+
+msgid "Executable used for every file you open. Blank = OS default app."
+msgstr "Executável usado para cada arquivo aberto. Vazio = app padrão do sistema."
+
+msgid "(blank = OS default)"
+msgstr "(vazio = padrão do SO)"
+
+msgid "Browse…"
+msgstr "Procurar…"
+
+msgid "Warn when opening large files"
+msgstr "Avisar ao abrir arquivos grandes"
+
+msgid "Show a confirmation before opening a file larger than this many MB in the editor (guards against mis-clicking a binary). 0 = never warn."
+msgstr "Mostrar uma confirmação antes de abrir no editor um arquivo maior que esta quantidade de MB (evita clicar em um binário por engano). 0 = nunca avisar."
+
+msgid "Panel side"
+msgstr "Lado do painel"
+
+msgid "Auto-show log on activity"
+msgstr "Mostrar registro automaticamente em atividade"
+
+msgid "Reveals the log list at the bottom of the panel whenever a transfer starts or a message is logged. While the list is shown, the Tabby transfers popup is hidden."
+msgstr "Exibe a lista de registro na parte inferior do painel sempre que uma transferência começa ou uma mensagem é registrada. Enquanto a lista é exibida, o popup de transferências do Tabby fica oculto."
+
+msgid "Toggle hotkey"
+msgstr "Tecla de atalho de alternância"
+
+msgid "Set under Settings → Hotkeys → \"Focus SFTP Panel\""
+msgstr "Defina em Configurações → Teclas de atalho → «Focar SFTP Panel»"
+
+msgid "Show vertical label on collapsed strip"
+msgstr "Mostrar rótulo vertical na faixa recolhida"
+
+msgid "The \"SFTP Panel\" text on the hover strip (unpinned). Off makes the strip thinner."
+msgstr "O texto \"SFTP Panel\" na faixa flutuante (não fixada). Desativado deixa a faixa mais fina."

@@ -1,0 +1,323 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language: ja-JP\n"
+
+# --- Spine / toolbar ---
+msgid "SFTP Panel — hover to open"
+msgstr "SFTP Panel — ホバーで開く"
+
+msgid "Click to edit path"
+msgstr "クリックしてパスを編集"
+
+msgid "Unpin (overlay)"
+msgstr "固定を解除（オーバーレイ）"
+
+msgid "Pin panel (dock)"
+msgstr "パネルを固定（ドック）"
+
+msgid "Refresh"
+msgstr "更新"
+
+msgid "New file"
+msgstr "新規ファイル"
+
+msgid "Hide dotfiles"
+msgstr "隠しファイルを非表示"
+
+msgid "Show dotfiles"
+msgstr "隠しファイルを表示"
+
+msgid "Upload files"
+msgstr "ファイルをアップロード"
+
+msgid "Upload folder"
+msgstr "フォルダーをアップロード"
+
+msgid "Filter..."
+msgstr "フィルター..."
+
+# --- List states ---
+msgid "Connecting…"
+msgstr "接続中…"
+
+msgid "Loading…"
+msgstr "読み込み中…"
+
+msgid "No files match \"{filter}\""
+msgstr "「{filter}」に一致するファイルがありません"
+
+msgid "items"
+msgstr "個"
+
+msgid "selected"
+msgstr "選択中"
+
+# --- Log section ---
+msgid "Log"
+msgstr "ログ"
+
+msgid "Clear all"
+msgstr "すべてクリア"
+
+msgid "No log entries"
+msgstr "ログエントリなし"
+
+msgid "Stop"
+msgstr "停止"
+
+# --- Column headers ---
+msgid "Size"
+msgstr "サイズ"
+
+msgid "Modified"
+msgstr "更新日時"
+
+msgid "Owner"
+msgstr "所有者"
+
+msgid "Permissions"
+msgstr "権限"
+
+# --- Context menu ---
+msgid "Open"
+msgstr "開く"
+
+msgid "Open with default app"
+msgstr "既定のアプリで開く"
+
+msgid "Rename…"
+msgstr "名前を変更…"
+
+msgid "Copy / Move…"
+msgstr "コピー / 移動…"
+
+msgid "Copy path"
+msgstr "パスをコピー"
+
+msgid "Permissions…"
+msgstr "権限…"
+
+msgid "Create file…"
+msgstr "ファイルを作成…"
+
+msgid "Create directory…"
+msgstr "ディレクトリを作成…"
+
+# --- Prompt / dialog labels ---
+msgid "New directory name"
+msgstr "新しいディレクトリ名"
+
+msgid "New file name"
+msgstr "新しいファイル名"
+
+msgid "Rename to"
+msgstr "変更後の名前"
+
+msgid "Overwrite"
+msgstr "上書き"
+
+msgid "Overwrite all"
+msgstr "すべて上書き"
+
+msgid "Skip"
+msgstr "スキップ"
+
+msgid "Skip all"
+msgstr "すべてスキップ"
+
+msgid "This file is large ({size}) and may be binary. Open it in the editor anyway?"
+msgstr "このファイルは大きく（{size}）、バイナリの可能性があります。それでもエディターで開きますか？"
+
+msgid "{target} already exists on the server."
+msgstr "{target} はサーバー上に既に存在します。"
+
+msgid "Delete {n} item(s)?"
+msgstr "{n} 個の項目を削除しますか？"
+
+# --- Log / notification messages ---
+msgid "Could not open SFTP"
+msgstr "SFTP を開けませんでした"
+
+msgid "Cannot open {path}"
+msgstr "{path} を開けません"
+
+msgid "Copy failed"
+msgstr "コピーに失敗しました"
+
+msgid "Could not open {name}"
+msgstr "{name} を開けませんでした"
+
+msgid "Could not read folder permissions"
+msgstr "フォルダーの権限を読み取れませんでした"
+
+msgid "Directory created"
+msgstr "ディレクトリを作成しました"
+
+msgid "Could not create directory"
+msgstr "ディレクトリを作成できませんでした"
+
+msgid "File created: {name}"
+msgstr "ファイルを作成しました: {name}"
+
+msgid "Could not create file: {name}"
+msgstr "ファイルを作成できませんでした: {name}"
+
+msgid "Renamed {old} → {new}"
+msgstr "名前を変更しました {old} → {new}"
+
+msgid "Rename failed: {name}"
+msgstr "名前の変更に失敗しました: {name}"
+
+msgid "Move failed on {n} item(s)"
+msgstr "{n} 個の項目の移動に失敗しました"
+
+msgid "Moved {n} item(s) to {dest}"
+msgstr "{n} 個の項目を {dest} に移動しました"
+
+msgid "Copied {n} item(s) to {dest}"
+msgstr "{n} 個の項目を {dest} にコピーしました"
+
+msgid "Drag-out unavailable"
+msgstr "ドラッグアウトは利用できません"
+
+msgid "Drop folder not found — saving to Downloads"
+msgstr "ドロップ先フォルダーが見つかりません — ダウンロードに保存します"
+
+msgid "Drag-out failed"
+msgstr "ドラッグアウトに失敗しました"
+
+msgid "Checking existing files…"
+msgstr "既存ファイルを確認中…"
+
+msgid "Download folder failed: {name}"
+msgstr "フォルダーのダウンロードに失敗しました: {name}"
+
+msgid "Deleting {name}…"
+msgstr "{name} を削除中…"
+
+msgid "Deleting {name}… ({count} items)"
+msgstr "{name} を削除中…（{count} 個の項目）"
+
+msgid "Deleted {name}"
+msgstr "{name} を削除しました"
+
+msgid "Deleted {name} ({count} items)"
+msgstr "{name} を削除しました（{count} 個の項目）"
+
+msgid "Delete failed: {name}"
+msgstr "削除に失敗しました: {name}"
+
+msgid "chown failed on {n} item(s)"
+msgstr "{n} 個の項目で chown に失敗しました"
+
+msgid "chmod failed on {n} item(s)"
+msgstr "{n} 個の項目で chmod に失敗しました"
+
+msgid "Permissions updated"
+msgstr "権限を更新しました"
+
+msgid "Changing permissions… ({done}/{total})"
+msgstr "権限を変更中… ({done}/{total})"
+
+msgid "Changing ownership… ({done}/{total})"
+msgstr "所有者を変更中… ({done}/{total})"
+
+msgid "Ownership updated"
+msgstr "所有者を更新しました"
+
+msgid "Scanning folder… ({count})"
+msgstr "フォルダをスキャン中… ({count})"
+
+msgid "Cancelled"
+msgstr "キャンセルしました"
+
+msgid "Cancelled — {done}/{total} changed"
+msgstr "キャンセルしました — {done}/{total} 件変更"
+
+# --- chmod dialog ---
+msgid "Read"
+msgstr "読み取り"
+
+msgid "Write"
+msgstr "書き込み"
+
+msgid "Exec"
+msgstr "実行"
+
+msgid "Octal"
+msgstr "8進数"
+
+msgid "Other"
+msgstr "その他"
+
+msgid "Apply recursively to folder contents"
+msgstr "フォルダーの内容に再帰的に適用"
+
+msgid "The mode is applied literally to both files and folders."
+msgstr "モードはファイルとフォルダーの両方にそのまま適用されます。"
+
+# --- copy/move dialog ---
+msgid "Copy / Move"
+msgstr "コピー / 移動"
+
+msgid "Destination directory"
+msgstr "宛先ディレクトリ"
+
+msgid "Move"
+msgstr "移動"
+
+# --- settings ---
+msgid "When you open a file (double-click)"
+msgstr "ファイルを開くとき（ダブルクリック）"
+
+msgid "Start folder"
+msgstr "開始フォルダー"
+
+msgid "Folder the panel opens on connect. Absolute path (e.g. /var/www), or ~ for your home directory."
+msgstr "接続時にパネルが開くフォルダー。絶対パス（例: /var/www）、またはホームディレクトリを表す ~。"
+
+msgid "Use a default editor for opening files"
+msgstr "ファイルを開くのに既定のエディターを使用"
+
+msgid "Off: files open with the OS default app (normal Tabby behavior). On: pick one editor used for every file you open. Turning this on tries to auto-detect your editor (Windows only); you can also Browse or type the path. A blank path behaves like \"off\"."
+msgstr "オフ: ファイルは OS の既定アプリで開きます（Tabby の通常動作）。オン: 開くすべてのファイルに使う 1 つのエディターを選びます。オンにするとエディターの自動検出を試みます（Windows のみ）。参照するかパスを入力することもできます。空のパスは「オフ」と同じ動作です。"
+
+msgid "Editor path"
+msgstr "エディターのパス"
+
+msgid "Executable used for every file you open. Blank = OS default app."
+msgstr "開くすべてのファイルに使う実行ファイル。空欄 = OS の既定アプリ。"
+
+msgid "(blank = OS default)"
+msgstr "（空欄 = OS の既定）"
+
+msgid "Browse…"
+msgstr "参照…"
+
+msgid "Warn when opening large files"
+msgstr "大きなファイルを開くときに警告"
+
+msgid "Show a confirmation before opening a file larger than this many MB in the editor (guards against mis-clicking a binary). 0 = never warn."
+msgstr "この MB 数より大きいファイルをエディターで開く前に確認を表示します（バイナリの誤クリックを防止）。0 = 警告しない。"
+
+msgid "Panel side"
+msgstr "パネルの位置"
+
+msgid "Auto-show log on activity"
+msgstr "アクティビティ時にログを自動表示"
+
+msgid "Reveals the log list at the bottom of the panel whenever a transfer starts or a message is logged. While the list is shown, the Tabby transfers popup is hidden."
+msgstr "転送が始まるかメッセージが記録されるたびに、パネル下部にログ一覧を表示します。一覧の表示中は Tabby の転送ポップアップは非表示になります。"
+
+msgid "Toggle hotkey"
+msgstr "切り替えホットキー"
+
+msgid "Set under Settings → Hotkeys → \"Focus SFTP Panel\""
+msgstr "設定 → ホットキー → 「SFTP Panel にフォーカス」 で設定"
+
+msgid "Show vertical label on collapsed strip"
+msgstr "折りたたんだストリップに縦書きラベルを表示"
+
+msgid "The \"SFTP Panel\" text on the hover strip (unpinned). Off makes the strip thinner."
+msgstr "ホバーストリップ（固定解除時）の「SFTP Panel」テキスト。オフにするとストリップが細くなります。"
