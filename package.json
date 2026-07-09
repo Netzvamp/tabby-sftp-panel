@@ -13,6 +13,9 @@
   "files": ["dist"],
   "author": "Robert Lieback",
   "license": "MIT",
+  "repository": "github:Netzvamp/tabby-sftp-panel",
+  "homepage": "https://github.com/Netzvamp/tabby-sftp-panel#readme",
+  "bugs": "https://github.com/Netzvamp/tabby-sftp-panel/issues",
   "peerDependencies": {
     "@angular/common": "^15",
     "@angular/core": "^15",

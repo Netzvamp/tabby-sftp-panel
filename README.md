@@ -5,11 +5,11 @@ A standalone SFTP file browser that lives on the edge of every SSH tab in
 pane and reuses Tabby's SFTP services, so it **coexists** with Tabby's built-in
 SFTP panel rather than replacing it.
 
-> **Status:** live-smoke-verified in Electron Tabby. Config key: `sftpPanel`.
+<img src="screenshots/panel.png" alt="The expanded panel, docked to the left of an SSH tab" width="700" align="center">
 
 ## Features
 
-- **Edge-strip panel** — a permanent 24px strip on every SSH pane that expands
+- **Edge-strip panel** — a permanent strip on every SSH pane that expands
   on hover. **Pin** it to dock (terminal shrinks to make room) or leave it
   unpinned to overlay the terminal on hover. Works per-pane in split tabs.
 - **File browser** — right-click context menu (Tabby's SFTP items + ours),
@@ -45,6 +45,8 @@ Tabby (plugins are scanned only at startup):
 
 ## Usage
 
+<img src="screenshots/unpinned.png" alt="The collapsed 24px edge strip on an SSH tab" width="100" align="right">
+
 Open an SSH tab. The SFTP Panel strip appears on the configured edge — hover to
 expand, or press the hotkey to reveal and focus it.
 
@@ -55,9 +57,14 @@ expand, or press the hotkey to reveal and focus it.
 
 Rebind the hotkey under Tabby → Settings → Hotkeys.
 
+<br clear="right">
+
+
 ## Configuration
 
 All settings live under Tabby → Settings → **SFTP Panel** (config key `sftpPanel`):
+
+![The SFTP Panel settings tab in Tabby](screenshots/settings.png)
 
 | Setting | Default | Notes |
 |---------|---------|-------|
