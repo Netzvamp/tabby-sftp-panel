@@ -56,7 +56,7 @@ src/
                       columns (moveColumn), editor (parseFtypeExe/isBigFile), server-side cp/mv
                       (shQuote/buildCpCommand/expandDirs)
   logic.ts            dock math (clampSize/dockSize) — clampSize reused for transfer-list height
-  *.test.ts           node:test units for sftp-util (22) + logic (4) = 26
+  *.test.ts           node:test units for sftp-util (24) + logic (4) = 28
 docs/superpowers/      specs + plans (design of record)
 _tabby-ref/            full Tabby source, READ-ONLY reference. NOT ours. Ignore in globs.
 ```
@@ -71,7 +71,7 @@ loads the built file, not the source.
 ```
 npm run build      # webpack → dist/index.js
 npm run watch      # rebuild on change
-npm test           # tsx --test src/*.test.ts — 26 units (sftp-util 22 + logic 4)
+npm test           # tsx --test src/*.test.ts — 28 units (sftp-util 24 + logic 4)
 npx tsc --noEmit -p tsconfig.json   # REQUIRED type-check — build does NOT type-check
 ```
 
@@ -99,6 +99,25 @@ Tabby's loader throws in `parsePluginInfo` and silently drops the plugin (no log
 
 Debug: `fs` works in Tabby's renderer (nodeIntegration on) → file-based logging is
 handy because the terminal swallows Ctrl+Shift+I/R; open DevTools via Command Palette.
+
+## Publish (appear in Tabby's plugin manager)
+
+The manager (`tabby-plugin-manager/src/services/pluginManager.service.ts`) hits
+`registry.npmjs.com/-/v1/search?text=keywords:tabby-plugin` and then keeps only packages
+whose npm name starts with `tabby-`. So discovery needs exactly: npm name `tabby-*` +
+`keywords: ["tabby-plugin"]` + `author`. It reads `description`, `version`, `homepage`,
+`author` straight off the registry — no README rendering, so README image paths must be
+absolute URLs (raw.githubusercontent) since `files: ["dist"]` keeps `screenshots/` out of
+the tarball.
+
+```
+npm login && npm publish       # prepublishOnly rebuilds dist/
+npm version patch|minor|major  # then `git push --follow-tags` + publish again
+```
+
+`files: ["dist"]` beats `.gitignore` (dist is git-ignored but ships) — verify with
+`npm pack --dry-run`. The manager shows the highest semver of a name; installs run
+`npm install <pkg>@<version>` into `userPluginsPath`.
 
 ## Tabby internals that bite (verified against source)
 
