@@ -9,8 +9,7 @@
   "scripts": {
     "build": "webpack --progress --color",
     "watch": "webpack --progress --color --watch",
-    "test": "tsx --test src/*.test.ts",
-    "prepublishOnly": "npm run build"
+    "test": "tsx --test src/*.test.ts"
   },
   "files": [
     "dist"
