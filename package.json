@@ -4,11 +4,11 @@
   "description": "A standalone SFTP file browser panel for Tabby with resizable/sortable columns, overlay-or-dock positioning, multi-select, and edit-on-open. Coexists with the built-in panel.",
   "keywords": ["tabby-plugin"],
   "main": "dist/index.js",
-  "typings": "dist/index.d.ts",
   "scripts": {
     "build": "webpack --progress --color",
     "watch": "webpack --progress --color --watch",
-    "test": "tsx --test src/*.test.ts"
+    "test": "tsx --test src/*.test.ts",
+    "prepublishOnly": "npm run build"
   },
   "files": ["dist"],
   "author": "Robert Lieback",
