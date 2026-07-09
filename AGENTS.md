@@ -43,7 +43,8 @@ src/
   i18n.service.ts     SftpI18nService (providedIn:root) — merges locale/<lang>.po into Tabby's live
                       ngx-translate catalog (setTranslation merge=true) on init + LocaleService
                       .localeChanged$. Only ships strings Tabby lacks; shared labels reuse Tabby's.
-  locale/*.po         our gettext catalogs (de-DE, zh-CN, ru-RU, es-ES, fr-FR, ja-JP, pt-BR).
+../locale/*.po      our gettext catalogs — at the REPO ROOT, not under src/ (de-DE, zh-CN,
+                      ru-RU, es-ES, fr-FR, ja-JP, pt-BR).
                       gap strings only, 96 msgid each, identical key sets. built via json-loader +
                       po-gettext-loader (webpack .po rule) — same chain Tabby uses. i18n.service
                       picks up new langs automatically (dynamic require → webpack context).
@@ -56,7 +57,8 @@ src/
                       columns (moveColumn), editor (parseFtypeExe/isBigFile), server-side cp/mv
                       (shQuote/buildCpCommand/expandDirs)
   logic.ts            dock math (clampSize/dockSize) — clampSize reused for transfer-list height
-  *.test.ts           node:test units for sftp-util (24) + logic (4) = 28
+  *.test.ts           node:test units for sftp-util (24) + logic (4) + i18n (2) = 30
+                      i18n.test.ts guards the catalogs: identical msgid sets, no empty msgstr
 docs/superpowers/      specs + plans (design of record)
 _tabby-ref/            full Tabby source, READ-ONLY reference. NOT ours. Ignore in globs.
 ```
@@ -71,15 +73,17 @@ loads the built file, not the source.
 ```
 npm run build      # webpack → dist/index.js
 npm run watch      # rebuild on change
-npm test           # tsx --test src/*.test.ts — 28 units (sftp-util 24 + logic 4)
+npm test           # tsx --test src/*.test.ts — 30 units (sftp-util 24 + logic 4 + i18n 2)
 npx tsc --noEmit -p tsconfig.json   # REQUIRED type-check — build does NOT type-check
 ```
 
 **Build gate blind spot:** webpack uses `ts-loader { transpileOnly: true }` → no type
 check, no AOT template compile (Ivy runs JIT at runtime). A green `npm run build`
-catches **neither** type errors **nor** template/module-scope errors (missing pipe/
-directive throw only at first render). So: run `tsc --noEmit` for types, and a **live
-Tabby smoke test is mandatory** for template-scope bugs.
+catches **neither** type errors **nor** template/module-scope errors (a missing pipe or
+directive throws only at first render, e.g. `NG0302`). `tsc --noEmit` closes the type
+half; nothing closes the template half — those surface only when the panel renders in a
+running Tabby. CI (`.github/workflows/ci.yml`) runs `npm ci` + `tsc --noEmit` + `npm test`
++ `npm run build` on every push to main and every PR.
 
 Windows: `npm install` needs `.npmrc` `ignore-scripts=true` (tabby-ssh postinstall has
 no win32 script; deps are webpack-externalized so install scripts are unneeded anyway).
@@ -159,8 +163,8 @@ publishing now needs a passkey/WebAuthn; that's the fallback if CI is ever broke
   an apostrophe in a msgid is an MF escape char and mangles the English fallback — reword the
   source string to avoid `'`. (2) Dialog button arrays that double as `switch` keys must keep an
   untranslated key array for logic and translate only the display labels. (3) `translate` pipe is
-  in scope via TabbyCoreModule (re-exports TranslateModule) — but that's template-scope, so a
-  live smoke test is the only real check. (4) **Merge-after-render refresh:** panels mount before
+  in scope via TabbyCoreModule (re-exports TranslateModule) — but that's template-scope, which
+  no build step or test verifies. (4) **Merge-after-render refresh:** panels mount before
   our merge runs, so their pipes cache the English key. `setTranslation` only emits
   `onTranslationChange`, whose pipe handler is gated on `currentLang` — but Tabby sets only
   `defaultLang` (currentLang stays undefined), so pipes ignore it and show English until unrelated
@@ -207,7 +211,7 @@ publishing now needs a passkey/WebAuthn; that's the fallback if CI is ever broke
 
 ## Status
 
-Live-smoke-verified in Electron Tabby. Merged to main:
+Shipping. Published on npm (`tabby-sftp-panel`), listed in Tabby's plugin manager. On main:
 
 - Standalone panel as a collapsed edge strip that expands on hover; pin to dock (terminal
   shrinks) vs overlay; per-pane in split tabs incl. startup-restored splits; Esc-collapse;
