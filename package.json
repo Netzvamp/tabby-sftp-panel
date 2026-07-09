@@ -2,7 +2,9 @@
   "name": "tabby-sftp-panel",
   "version": "0.1.0",
   "description": "A standalone SFTP file browser panel for Tabby with resizable/sortable columns, overlay-or-dock positioning, multi-select, and edit-on-open. Coexists with the built-in panel.",
-  "keywords": ["tabby-plugin"],
+  "keywords": [
+    "tabby-plugin"
+  ],
   "main": "dist/index.js",
   "scripts": {
     "build": "webpack --progress --color",
@@ -10,10 +12,15 @@
     "test": "tsx --test src/*.test.ts",
     "prepublishOnly": "npm run build"
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "author": "Robert Lieback",
   "license": "MIT",
-  "repository": "github:Netzvamp/tabby-sftp-panel",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Netzvamp/tabby-sftp-panel.git"
+  },
   "homepage": "https://github.com/Netzvamp/tabby-sftp-panel#readme",
   "bugs": "https://github.com/Netzvamp/tabby-sftp-panel/issues",
   "peerDependencies": {
