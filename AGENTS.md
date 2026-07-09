@@ -110,14 +110,34 @@ whose npm name starts with `tabby-`. So discovery needs exactly: npm name `tabby
 absolute URLs (raw.githubusercontent) since `files: ["dist"]` keeps `screenshots/` out of
 the tarball.
 
+### Cutting a release
+
+**Never run `npm publish` by hand.** CI owns publishing. A release is a tag push:
+
 ```
-npm login && npm publish       # prepublishOnly rebuilds dist/
-npm version patch|minor|major  # then `git push --follow-tags` + publish again
+npm version patch|minor|major   # bumps package.json, commits, tags vX.Y.Z
+git push --follow-tags          # tag push triggers .github/workflows/publish.yml
 ```
+
+`.github/workflows/publish.yml` runs on `push: tags: ['v*']` → `npm ci`, `tsc --noEmit`,
+`npm test`, `npm run build`, `npm publish --provenance`. Auth is **trusted publishing**
+(OIDC, `id-token: write`) — the npm package's Settings → Trusted Publisher is wired to
+this repo + `publish.yml`. No npm token exists anywhere; don't add one, and don't rename
+the workflow file (npm matches it by exact filename or rejects the OIDC token).
+
+Verify after: `npm view tabby-sftp-panel version`. Re-running a tag is harmless — npm
+refuses to overwrite an existing version (`E403 cannot publish over existing version`).
+
+**`.npmrc` `ignore-scripts=true` suppresses OUR OWN lifecycle scripts too** — a
+`prepublishOnly: npm run build` silently never runs and you ship a stale `dist/`. That's
+why the workflow builds explicitly. Same trap for any future pre/post script.
 
 `files: ["dist"]` beats `.gitignore` (dist is git-ignored but ships) — verify with
 `npm pack --dry-run`. The manager shows the highest semver of a name; installs run
 `npm install <pkg>@<version>` into `userPluginsPath`.
+
+npm killed TOTP enrollment (Sept 2025) and revoked classic tokens (Dec 2025). Interactive
+publishing now needs a passkey/WebAuthn; that's the fallback if CI is ever broken.
 
 ## Tabby internals that bite (verified against source)
 
