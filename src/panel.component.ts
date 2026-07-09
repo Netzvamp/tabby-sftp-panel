@@ -568,8 +568,8 @@ export class SftpPanelComponent implements OnDestroy {
 
     async navigate (newPath: string): Promise<void> {
         const previous = this.path
-        // Reload (same folder, e.g. refresh button / post-op refresh): keep the marked
-        // file/folder(s) and scroll position instead of resetting them.
+        // Reload (same folder, e.g. refresh button / F5 / post-op refresh): keep the filter,
+        // the marked file/folder(s) and the scroll position instead of resetting them.
         const reload = newPath === previous
         // Going up to the direct parent (via .., goUp hotkey, or parent breadcrumb):
         // mark the folder we came from once the parent listing loads.
@@ -578,7 +578,7 @@ export class SftpPanelComponent implements OnDestroy {
         const scrollBody = this.host.nativeElement.querySelector('.sp-body') as HTMLElement | null
         const keepScroll = reload ? scrollBody?.scrollTop ?? 0 : 0
         this.path = newPath
-        this.clearFilter()
+        if (!reload) { this.clearFilter() }
         this.selection.clear(); this.lastIndex = -1; this.upCursor = false
 
         this.fileList = null
