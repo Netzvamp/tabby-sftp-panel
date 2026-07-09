@@ -84,6 +84,14 @@ Tabby smoke test is mandatory** for template-scope bugs.
 Windows: `npm install` needs `.npmrc` `ignore-scripts=true` (tabby-ssh postinstall has
 no win32 script; deps are webpack-externalized so install scripts are unneeded anyway).
 
+**`npm audit` noise is expected — do NOT "fix" it.** The package has zero `dependencies`
+(only dev + peer), so `npm audit --omit=dev` reports 0 — nothing vulnerable ever reaches
+a user, who gets only the bundled `dist/index.js`. The ~18 dev-only findings come from
+versions Tabby pins for us: `@babel/core` + Angular via `@ng-bootstrap@14 → @angular/localize@15`,
+and `@luminati-io/socksv5` via `tabby-ssh`. `npm audit fix --force` would install
+`@ng-bootstrap@21`, i.e. Angular-21 typings against Tabby's Angular-15 runtime — and
+`transpileOnly` means the build stays green while the panel breaks at first render.
+
 ## Dev deploy (load into Tabby)
 
 Junction the repo into Tabby's plugin dir, then **fully restart** Tabby (plugins scan
