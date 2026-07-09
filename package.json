@@ -1,6 +1,6 @@
 {
   "name": "tabby-sftp-panel",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A standalone SFTP file browser panel for Tabby with resizable/sortable columns, overlay-or-dock positioning, multi-select, and edit-on-open. Coexists with the built-in panel.",
   "keywords": [
     "tabby-plugin"
