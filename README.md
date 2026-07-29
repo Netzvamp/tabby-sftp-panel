@@ -15,7 +15,8 @@ SFTP panel rather than replacing it.
   on hover. **Pin** it to dock (terminal shrinks to make room) or leave it
   unpinned to overlay the terminal on hover. Works per-pane in split tabs.
 - **File browser** — right-click context menu (Tabby's SFTP items + ours),
-  live filter, and **sortable / reorderable / resizable columns**: name, size,
+  live filter (substring, or wildcards — `*.log`, `report-2026-??.csv`), and
+  **sortable / reorderable / resizable columns**: name, size,
   modified, owner, group, permissions. Configurable start directory and a
   show-hidden toggle.
 - **Transfer / activity log** — an embedded, toggleable list of file transfers

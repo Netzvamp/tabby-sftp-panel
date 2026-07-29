@@ -100,7 +100,11 @@ export function sortFiles (list: PanelFile[], column: SortColumn, dir: SortDir):
 export function filterFiles (list: PanelFile[], text: string): PanelFile[] {
     const q = text.trim().toLowerCase()
     if (!q) { return list }
-    return list.filter(i => i.name.toLowerCase().includes(q))
+    // No wildcard → plain substring match (what people type most of the time).
+    // With `*`/`?` → glob, anchored, so `*.log` means "ends in .log" and not "contains .log".
+    if (!/[*?]/.test(q)) { return list.filter(i => i.name.toLowerCase().includes(q)) }
+    const rx = new RegExp(`^${q.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.')}$`)
+    return list.filter(i => rx.test(i.name.toLowerCase()))
 }
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']

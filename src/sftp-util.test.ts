@@ -44,6 +44,19 @@ test('filterFiles is case-insensitive; empty returns all', () => {
   assert.equal(filterFiles(list, '   ').length, 2)
 })
 
+test('filterFiles: * and ? are wildcards, anchored to the whole name', () => {
+  const list = [f({ name: 'application.log' }), f({ name: 'error.log' }), f({ name: 'log.txt' }),
+    f({ name: 'report-2026-01.csv' }), f({ name: 'report-2026-001.csv' })]
+  assert.deepEqual(filterFiles(list, '*.log').map(i => i.name), ['application.log', 'error.log'])
+  assert.deepEqual(filterFiles(list, 'report-2026-??.csv').map(i => i.name), ['report-2026-01.csv'])
+  assert.deepEqual(filterFiles(list, '*LOG*').map(i => i.name).length, 3)
+})
+
+test('filterFiles: regex metacharacters in a wildcard pattern are literal', () => {
+  const list = [f({ name: 'a.log' }), f({ name: 'axlog' })]
+  assert.deepEqual(filterFiles(list, '?.log').map(i => i.name), ['a.log'])
+})
+
 test('formatSize: bytes, kB, MB, and invalid', () => {
   assert.equal(formatSize(0), '0 B')
   assert.equal(formatSize(1023), '1023 B')
