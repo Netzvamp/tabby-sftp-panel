@@ -107,6 +107,16 @@ export function filterFiles (list: PanelFile[], text: string): PanelFile[] {
     return list.filter(i => rx.test(i.name.toLowerCase()))
 }
 
+// Modified column: "2026-07-29 14:28". Deliberately not Tabby's `tabbyDate` pipe, which
+// formats 'medium' in the UI locale and therefore renders AM/PM on en-US — unhelpful in a
+// column people scan for recency. Numeric and locale-independent, so it also sorts visually.
+export function formatFileTime (d: Date | string): string {
+    const t = new Date(d as any)
+    if (isNaN(+t)) { return '' }
+    const p = (n: number) => String(n).padStart(2, '0')
+    return `${t.getFullYear()}-${p(t.getMonth() + 1)}-${p(t.getDate())} ${p(t.getHours())}:${p(t.getMinutes())}`
+}
+
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
 // Compact transfer timestamp: same day as `now` → "HH:mm", else "MMM d, HH:mm".

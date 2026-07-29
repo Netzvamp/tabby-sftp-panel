@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { getFileType, getIcon, getModeString, sortFiles, filterFiles, formatSize, formatTransferTime, octalToPerms, permsToOctal, parseLsOwners, isBigFile, parseFtypeExe } from './sftp-util'
+import { getFileType, getIcon, getModeString, sortFiles, filterFiles, formatSize, formatFileTime, formatTransferTime, octalToPerms, permsToOctal, parseLsOwners, isBigFile, parseFtypeExe } from './sftp-util'
 import { logFullText, computeLogSelection, LogEntry, describeSftpError } from './sftp-util'
 import { startNeedsHome, resolveStartPath } from './sftp-util'
 import { expandDirs, folderEntryFromParent } from './sftp-util'
@@ -63,6 +63,13 @@ test('formatSize: bytes, kB, MB, and invalid', () => {
   assert.equal(formatSize(1536), '1.5 kB')
   assert.equal(formatSize(1048576), '1.0 MB')
   assert.equal(formatSize(-5), '')
+})
+
+test('formatFileTime: 24-hour, zero-padded, invalid → empty', () => {
+  assert.equal(formatFileTime(new Date(2026, 6, 29, 14, 28)), '2026-07-29 14:28')
+  assert.equal(formatFileTime(new Date(2026, 0, 5, 9, 7)), '2026-01-05 09:07')
+  assert.equal(formatFileTime(new Date(2026, 6, 29, 0, 0)), '2026-07-29 00:00')   // not 12:00 AM
+  assert.equal(formatFileTime('nonsense'), '')
 })
 
 test('formatTransferTime: same day → HH:mm', () => {

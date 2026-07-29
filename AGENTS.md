@@ -45,7 +45,7 @@ src/
                       .localeChanged$. Only ships strings Tabby lacks; shared labels reuse Tabby's.
 ../locale/*.po      our gettext catalogs — at the REPO ROOT, not under src/ (de-DE, zh-CN,
                       ru-RU, es-ES, fr-FR, ja-JP, pt-BR).
-                      gap strings only, 96 msgid each, identical key sets. built via json-loader +
+                      gap strings only, 109 msgid each, identical key sets. built via json-loader +
                       po-gettext-loader (webpack .po rule) — same chain Tabby uses. i18n.service
                       picks up new langs automatically (dynamic require → webpack context).
   settings.ts         settings tab for sftpPanel
@@ -57,7 +57,7 @@ src/
                       columns (moveColumn), editor (parseFtypeExe/isBigFile), server-side cp/mv
                       (shQuote/buildCpCommand/expandDirs)
   logic.ts            dock math (clampSize/dockSize) — clampSize reused for transfer-list height
-  *.test.ts           node:test units for sftp-util (24) + logic (4) + i18n (2) = 30
+  *.test.ts           node:test units for sftp-util (27) + logic (4) + i18n (2) = 33
                       i18n.test.ts guards the catalogs: identical msgid sets, no empty msgstr
 docs/superpowers/      specs + plans (design of record)
 _tabby-ref/            full Tabby source, READ-ONLY reference. NOT ours. Ignore in globs.
@@ -73,7 +73,7 @@ loads the built file, not the source.
 ```
 npm run build      # webpack → dist/index.js
 npm run watch      # rebuild on change
-npm test           # tsx --test src/*.test.ts — 30 units (sftp-util 24 + logic 4 + i18n 2)
+npm test           # tsx --test src/*.test.ts — 33 units (sftp-util 27 + logic 4 + i18n 2)
 npx tsc --noEmit -p tsconfig.json   # REQUIRED type-check — build does NOT type-check
 ```
 
@@ -182,6 +182,17 @@ publishing now needs a passkey/WebAuthn; that's the fallback if CI is ever broke
   `tab.element.nativeElement`; terminal host = its `.content` child (set margin there to
   shrink terminal — Tabby's ResizeObserver refits xterm, no manual refit). `tab.destroyed$`.
   Split tabs: `app.activeTab.getFocusedTab()`.
+- **`SFTPSession.stat()` is NOT a usable metadata source.** russh fills in `size` but leaves
+  `permissions` and `mtime` empty, so tabby-ssh maps them to `mode: 0` and
+  `modified: new Date(0)` — silently, no error. Verified against a real server: `stat()` on a
+  0644 file returns `{size: 9, mode: 0, modified: 1970-01-01}`. Consequences if you trust it:
+  passing that mode to `sftp.chmod()` sets the remote file to `0000`, and passing it to
+  `startDownload()` marks the local file read-only on Windows (the next download then cannot
+  overwrite it). `readdir()` DOES carry complete metadata (`entry.metadata.permissions/.mtime`),
+  which is why the panel's Modified/Permissions columns are correct. **Get fresh metadata by
+  reading the parent directory and picking the entry out** — that is what `freshMeta()` does in
+  both panel.component.ts and local-edit.service.ts. Note readdir's `mode` includes the file-type
+  bits (0o100644 = 33188), same as everywhere else in the panel.
 - **`| filesize` pipe is NOT in scope** for a plugin importing TabbyCoreModule (NgxFilesize
   is imported by AppModule, not re-exported) → `NG0302` at render. Use `formatSize()` in sftp-util.
 - **Create-dir modal:** tabby-ssh does NOT export `SFTPCreateDirectoryModalComponent`.
@@ -223,3 +234,8 @@ Shipping. Published on npm (`tabby-sftp-panel`), listed in Tabby's plugin manage
   folder-upload aggregation, per-line Stop, hides Tabby's popup, auto-show on transfer).
 - chmod/chown dialog, copy/move to a destination on the server, and "edit locally" with a
   configurable editor (or OS default) + auto re-upload on save.
+- Edited files are tracked in `LocalEditService.openEdits` (temp dir → remote path + mtime
+  baseline): temp copies are wiped on window unload, a re-upload whose remote mtime moved since
+  the last transfer prompts before overwriting, and a failed re-upload raises a modal naming the
+  temp path (a log line alone got missed). Conflict detection runs on save only — no polling,
+  and no "refresh local" / "keep both" options yet (issue #5).

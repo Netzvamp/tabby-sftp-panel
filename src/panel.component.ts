@@ -11,7 +11,7 @@ import {
 } from 'tabby-core'
 import type { SFTPSession, SFTPFile } from 'tabby-ssh'
 import { SFTPContextMenuItemProvider } from 'tabby-ssh'
-import { getIcon, getModeString, sortFiles, filterFiles, formatSize, formatTransferTime, computeLogSelection, SortColumn, SortDir, LogEntry, startNeedsHome, resolveStartPath, parseLsOwners, PanelFile, moveColumn, expandDirs, isBigFile, parseNames, shQuote, buildCpCommand, folderEntryFromParent, describeSftpError } from './sftp-util'
+import { getIcon, getModeString, sortFiles, filterFiles, formatSize, formatFileTime, formatTransferTime, computeLogSelection, SortColumn, SortDir, LogEntry, startNeedsHome, resolveStartPath, parseLsOwners, PanelFile, moveColumn, expandDirs, isBigFile, parseNames, shQuote, buildCpCommand, folderEntryFromParent, describeSftpError } from './sftp-util'
 import { clampSize } from './logic'
 import { LogService } from './log.service'
 import { ChmodDialogComponent } from './chmod-dialog.component'
@@ -234,7 +234,7 @@ class StreamDownload extends FileDownload {
               <div class="sp-cell" [ngClass]="cellClass(k)" *ngFor="let k of orderedCols()" [style.width.px]="col[k].width" [ngSwitch]="k">
                 <ng-container *ngSwitchCase="'name'"><i class="fa-fw" [class]="icon(item)"></i> {{item.name}}</ng-container>
                 <ng-container *ngSwitchCase="'size'">{{item.isDirectory ? '' : sizeText(item.size)}}</ng-container>
-                <ng-container *ngSwitchCase="'modified'">{{item.modified | tabbyDate}}</ng-container>
+                <ng-container *ngSwitchCase="'modified'">{{timeText(item.modified)}}</ng-container>
                 <ng-container *ngSwitchCase="'owner'">{{item.owner}}</ng-container>
                 <ng-container *ngSwitchCase="'group'">{{item.group}}</ng-container>
                 <ng-container *ngSwitchCase="'perms'">{{mode(item)}}</ng-container></div>
@@ -849,6 +849,7 @@ export class SftpPanelComponent implements OnDestroy {
     icon (item: SFTPFile): string { return getIcon(item) }
     mode (item: SFTPFile): string { return getModeString(item) }
     sizeText (bytes: number): string { return formatSize(bytes) }
+    timeText (d: Date | string): string { return formatFileTime(d) }
     txTime (e: LogEntry): string { return formatTransferTime(e.time, new Date()) }
     txActive (e: LogEntry): boolean { return !!e.transfer && !e.transfer.isComplete() && !e.transfer.isCancelled() }
     txPercent (e: LogEntry): number {
@@ -1226,9 +1227,12 @@ export class SftpPanelComponent implements OnDestroy {
             const item = this.dragFiles.get(url.slice(6))
             if (!item || !this.sftp) { res.statusCode = 404; res.end(); return }
             this.dragFiles.clear() // one-shot
+            // Content-Length has to be right or the receiving side aborts the drop, so this
+            // one really needs the current size, not the one from the listing.
+            const cur = await this.freshMeta(item.fullPath) ?? item
             res.setHeader('Content-Type', 'application/octet-stream')
-            res.setHeader('Content-Length', item.size)
-            const transfer = new StreamDownload(res, item.name, item.mode, item.size)
+            res.setHeader('Content-Length', cur.size)
+            const transfer = new StreamDownload(res, item.name, cur.mode, cur.size)
             res.on('close', () => { if (!transfer.isComplete()) { transfer.cancel() } })
             ;(this.platform as any).fileTransferStarted.next(transfer)
             this.log.setRemotePath(transfer, item.fullPath)
@@ -1509,6 +1513,8 @@ export class SftpPanelComponent implements OnDestroy {
         if (this.path === saved) { await this.navigate(this.path) }
     }
     async download (itemPath: string, mode: number, size: number): Promise<void> {
+        const fresh = await this.freshMeta(itemPath)
+        if (fresh) { mode = fresh.mode; size = fresh.size }
         const transfer = await this.platform.startDownload(path.basename(itemPath), mode, size)
         if (!transfer) { return }
         const dl = new CancelDownload(transfer)
@@ -1516,6 +1522,39 @@ export class SftpPanelComponent implements OnDestroy {
         this.log.setRemotePath(dl, itemPath)
         this.sftp.download(itemPath, dl).catch(() => { /* stopped/failed — row X reflects it */ })
     }
+    // Current metadata for one remote file, or null → keep whatever the caller had.
+    //
+    // Needed because the listing behind `item` can be minutes old, and a stale size breaks
+    // more than the progress bar: FileTransfer.isComplete() is `completedBytes >= getSize()`,
+    // so a file that grew reads as complete early and one that shrank never completes at all.
+    //
+    // This deliberately does NOT use SFTPSession.stat(): russh fills in `size` there but
+    // leaves `permissions` and `mtime` empty, which mapped to mode 0 — enough to chmod the
+    // remote file to 0000 on re-upload and to mark the local download read-only. readdir
+    // carries the complete metadata, so read the parent directory and pick the entry out.
+    // ponytail: one directory listing per transfer. Fine at panel scale; revisit if it ever
+    // runs against directories with tens of thousands of entries.
+    private async freshMeta (itemPath: string): Promise<SFTPFile | null> {
+        try {
+            const dir = path.dirname(itemPath)
+            const entries = await this.sftp.readdir(dir)
+            // We just paid for the whole listing — if it is the directory on screen, adopt it.
+            // No reason to keep rendering a size we now know is stale. Selection survives: it
+            // is a set of fullPaths, so resort() simply stops rendering entries that are gone.
+            // detectChanges because russh callbacks run outside Angular's zone (same reason
+            // LogService forces it); guarded because the tab can close mid-transfer.
+            if (dir === this.path && this.fileList !== null) {
+                this.fileList = entries
+                this.resort()
+                try { this.cdr.detectChanges() } catch { /* view already destroyed */ }
+            }
+            const hit = entries.find(e => e.fullPath === itemPath)
+            // A symlink entry describes the link, not its target — callers already resolved
+            // those themselves, so leave their values alone.
+            return !hit || hit.isSymlink ? null : hit
+        } catch { return null }
+    }
+
     // Called by name at runtime from tabby-ssh's CommonSFTPContextMenu ("Download"
     // item for files) — invisible to static grep, do NOT delete as dead code.
     async downloadItem (item: SFTPFile): Promise<void> {
