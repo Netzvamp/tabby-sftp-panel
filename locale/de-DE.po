@@ -321,3 +321,22 @@ msgstr "Vertikale Beschriftung am eingeklappten Streifen anzeigen"
 
 msgid "The \"SFTP Panel\" text on the hover strip (unpinned). Off makes the strip thinner."
 msgstr "Der \"SFTP Panel\"-Text auf dem Hover-Streifen (nicht angeheftet). Aus macht den Streifen schmaler."
+
+# --- Local editing conflicts ---
+msgid "{name} changed on the server since you opened it"
+msgstr "{name} wurde auf dem Server geändert, seit Sie die Datei geöffnet haben"
+
+msgid "Uploading now replaces the newer version on the server."
+msgstr "Beim Hochladen wird die neuere Version auf dem Server ersetzt."
+
+msgid "Upload anyway"
+msgstr "Trotzdem hochladen"
+
+msgid "Upload cancelled: {name}"
+msgstr "Hochladen abgebrochen: {name}"
+
+msgid "Could not save {name} to the server"
+msgstr "{name} konnte nicht auf dem Server gespeichert werden"
+
+msgid "Your changes are still in the local copy at {path}"
+msgstr "Ihre Änderungen liegen weiterhin in der lokalen Kopie unter {path}"

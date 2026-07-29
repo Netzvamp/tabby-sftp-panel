@@ -321,3 +321,22 @@ msgstr "Показывать вертикальную подпись на свё
 
 msgid "The \"SFTP Panel\" text on the hover strip (unpinned). Off makes the strip thinner."
 msgstr "Текст \"SFTP Panel\" на полосе при наведении (без закрепления). Выкл. делает полосу тоньше."
+
+# --- Local editing conflicts ---
+msgid "{name} changed on the server since you opened it"
+msgstr "Файл {name} изменился на сервере с момента открытия"
+
+msgid "Uploading now replaces the newer version on the server."
+msgstr "Загрузка заменит более новую версию на сервере."
+
+msgid "Upload anyway"
+msgstr "Всё равно загрузить"
+
+msgid "Upload cancelled: {name}"
+msgstr "Загрузка отменена: {name}"
+
+msgid "Could not save {name} to the server"
+msgstr "Не удалось сохранить {name} на сервере"
+
+msgid "Your changes are still in the local copy at {path}"
+msgstr "Ваши изменения остались в локальной копии по пути {path}"

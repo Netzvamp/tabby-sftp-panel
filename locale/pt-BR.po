@@ -321,3 +321,22 @@ msgstr "Mostrar rótulo vertical na faixa recolhida"
 
 msgid "The \"SFTP Panel\" text on the hover strip (unpinned). Off makes the strip thinner."
 msgstr "O texto \"SFTP Panel\" na faixa flutuante (não fixada). Desativado deixa a faixa mais fina."
+
+# --- Local editing conflicts ---
+msgid "{name} changed on the server since you opened it"
+msgstr "{name} foi alterado no servidor desde que você o abriu"
+
+msgid "Uploading now replaces the newer version on the server."
+msgstr "Enviar agora substituirá a versão mais recente no servidor."
+
+msgid "Upload anyway"
+msgstr "Enviar mesmo assim"
+
+msgid "Upload cancelled: {name}"
+msgstr "Envio cancelado: {name}"
+
+msgid "Could not save {name} to the server"
+msgstr "Não foi possível salvar {name} no servidor"
+
+msgid "Your changes are still in the local copy at {path}"
+msgstr "Suas alterações continuam na cópia local em {path}"

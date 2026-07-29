@@ -321,3 +321,22 @@ msgstr "Afficher le libellé vertical sur la bande repliée"
 
 msgid "The \"SFTP Panel\" text on the hover strip (unpinned). Off makes the strip thinner."
 msgstr "Le texte \"SFTP Panel\" sur la bande au survol (non épinglée). Désactivé rend la bande plus fine."
+
+# --- Local editing conflicts ---
+msgid "{name} changed on the server since you opened it"
+msgstr "{name} a été modifié sur le serveur depuis son ouverture"
+
+msgid "Uploading now replaces the newer version on the server."
+msgstr "Le téléversement va remplacer la version plus récente sur le serveur."
+
+msgid "Upload anyway"
+msgstr "Téléverser quand même"
+
+msgid "Upload cancelled: {name}"
+msgstr "Téléversement annulé : {name}"
+
+msgid "Could not save {name} to the server"
+msgstr "Impossible d'enregistrer {name} sur le serveur"
+
+msgid "Your changes are still in the local copy at {path}"
+msgstr "Vos modifications sont toujours dans la copie locale située dans {path}"

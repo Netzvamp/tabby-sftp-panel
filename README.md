@@ -19,6 +19,9 @@ SFTP panel rather than replacing it.
   **sortable / reorderable / resizable columns**: name, size,
   modified, owner, group, permissions. Configurable start directory and a
   show-hidden toggle.
+- **Safer local editing** — a file changed on the server while you had it open prompts
+  before your save overwrites it, and a re-upload that fails raises a dialog naming the
+  local copy your changes are still in.
 - **Transfer / activity log** — an embedded, toggleable list of file transfers
   and panel messages (chmod/copy/move results). Draggable + persisted height,
   per-line **Stop**, folder-upload aggregation, auto-show on transfer.

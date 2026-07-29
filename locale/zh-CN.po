@@ -321,3 +321,22 @@ msgstr "在折叠条上显示竖排标签"
 
 msgid "The \"SFTP Panel\" text on the hover strip (unpinned). Off makes the strip thinner."
 msgstr "悬停条（未固定）上的“SFTP Panel”文字。关闭后条更窄。"
+
+# --- Local editing conflicts ---
+msgid "{name} changed on the server since you opened it"
+msgstr "{name} 在您打开后已在服务器上被修改"
+
+msgid "Uploading now replaces the newer version on the server."
+msgstr "上传将覆盖服务器上较新的版本。"
+
+msgid "Upload anyway"
+msgstr "仍然上传"
+
+msgid "Upload cancelled: {name}"
+msgstr "已取消上传：{name}"
+
+msgid "Could not save {name} to the server"
+msgstr "无法将 {name} 保存到服务器"
+
+msgid "Your changes are still in the local copy at {path}"
+msgstr "您的更改仍保留在本地副本 {path} 中"

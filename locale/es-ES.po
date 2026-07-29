@@ -321,3 +321,22 @@ msgstr "Mostrar la etiqueta vertical en la tira contraída"
 
 msgid "The \"SFTP Panel\" text on the hover strip (unpinned). Off makes the strip thinner."
 msgstr "El texto \"SFTP Panel\" en la tira flotante (sin fijar). Desactivado hace la tira más estrecha."
+
+# --- Local editing conflicts ---
+msgid "{name} changed on the server since you opened it"
+msgstr "{name} ha cambiado en el servidor desde que lo abriste"
+
+msgid "Uploading now replaces the newer version on the server."
+msgstr "Al subirlo se reemplazará la versión más reciente del servidor."
+
+msgid "Upload anyway"
+msgstr "Subir de todos modos"
+
+msgid "Upload cancelled: {name}"
+msgstr "Subida cancelada: {name}"
+
+msgid "Could not save {name} to the server"
+msgstr "No se pudo guardar {name} en el servidor"
+
+msgid "Your changes are still in the local copy at {path}"
+msgstr "Tus cambios siguen en la copia local en {path}"

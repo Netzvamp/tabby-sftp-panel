@@ -321,3 +321,22 @@ msgstr "折りたたんだストリップに縦書きラベルを表示"
 
 msgid "The \"SFTP Panel\" text on the hover strip (unpinned). Off makes the strip thinner."
 msgstr "ホバーストリップ（固定解除時）の「SFTP Panel」テキスト。オフにするとストリップが細くなります。"
+
+# --- Local editing conflicts ---
+msgid "{name} changed on the server since you opened it"
+msgstr "{name} は開いた後にサーバー上で変更されました"
+
+msgid "Uploading now replaces the newer version on the server."
+msgstr "アップロードすると、サーバー上の新しいバージョンが置き換えられます。"
+
+msgid "Upload anyway"
+msgstr "それでもアップロード"
+
+msgid "Upload cancelled: {name}"
+msgstr "アップロードをキャンセルしました: {name}"
+
+msgid "Could not save {name} to the server"
+msgstr "{name} をサーバーに保存できませんでした"
+
+msgid "Your changes are still in the local copy at {path}"
+msgstr "変更内容はローカルコピー {path} に残っています"
