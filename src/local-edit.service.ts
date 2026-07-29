@@ -11,7 +11,23 @@ export type Opener = (tempPath: string) => void | Promise<void>
 
 @Injectable({ providedIn: 'root' })
 export class LocalEditService {
-  constructor (private config: ConfigService, private platform: PlatformService, private log: LogService) {}
+  // Temp dirs of files currently checked out for editing. Wiped when Tabby's window unloads,
+  // so quitting leaves no downloaded copies behind — and an editor still holding one gets the
+  // "file no longer exists" prompt instead of silently saving into the void.
+  private tempDirs = new Set<string>()
+
+  constructor (private config: ConfigService, private platform: PlatformService, private log: LogService) {
+    // beforeunload fires on quit and on reload alike, and rmSync is synchronous, so the
+    // deletes complete before the window goes away. A hard kill still leaks — OS temp sweep.
+    window.addEventListener('beforeunload', () => {
+      for (const dir of this.tempDirs) { this.rmTemp(dir) }
+    })
+  }
+
+  private rmTemp (dir: string): void {
+    this.tempDirs.delete(dir)
+    try { fs.rmSync(dir, { recursive: true, force: true }) } catch { /* ignore */ }
+  }
 
   // Launch a specific editor on the temp file (detached so closing the panel doesn't kill it).
   spawnOpener (exe: string): Opener {
@@ -79,7 +95,8 @@ export class LocalEditService {
   async edit (sftp: any, item: any, mode: number, size: number, opener: Opener): Promise<void> {
     const tempDir = fs.mkdtempSync(nodePath.join(os.tmpdir(), 'sftp-panel-'))  // stdlib mkdtemp, no tmp-promise dep
     const tempPath = nodePath.join(tempDir, item.name)
-    const cleanup = () => { try { fs.rmSync(tempDir, { recursive: true, force: true }) } catch { /* ignore */ } }
+    this.tempDirs.add(tempDir)
+    const cleanup = () => this.rmTemp(tempDir)
 
     try {
       const transfer = await (this.platform as any).startDownload(item.name, mode, size, tempPath)
