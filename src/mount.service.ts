@@ -23,6 +23,7 @@ interface Mounted {
     pinnedState?: boolean    // last-applied pinned value, to detect pin→unpin transitions
     collapseTimer?: any
     resizing?: boolean       // width-drag in progress — hold open (mouseleave fires mid-drag)
+    menuOpen?: boolean       // native context menu popped from the panel — hold open
 }
 
 @Injectable({ providedIn: 'root' })
@@ -190,6 +191,25 @@ export class PanelMountService {
             this.scheduleCollapse(mounted)
         })
 
+        // A native context menu (Electron Menu.popup) grabs the mouse WITHOUT blurring the
+        // window: the renderer sees a mouseleave, `document.hasFocus()` stays true, and the
+        // strip collapses out from under the open menu. Lock on contextmenu and release on
+        // the first input event the renderer sees again — the menu swallows everything until
+        // it closes. If no such event ever arrives the panel just stays open, which is the
+        // harmless failure direction.
+        host.addEventListener('contextmenu', () => {
+            mounted.menuOpen = true
+            const release = () => {
+                mounted.menuOpen = false
+                window.removeEventListener('mousemove', release, true)
+                window.removeEventListener('mousedown', release, true)
+                window.removeEventListener('keydown', release, true)
+            }   // no collapse kick needed: tryCollapse re-arms itself every 300ms while locked
+            window.addEventListener('mousemove', release, true)
+            window.addEventListener('mousedown', release, true)
+            window.addEventListener('keydown', release, true)
+        }, true)
+
         const subs: any[] = []
         subs.push(topTab.destroyed$?.subscribe?.(() => this.unmount(topTab)))
         const updateSession = () => {
@@ -307,7 +327,7 @@ export class PanelMountService {
     private tryCollapse (m: Mounted): void {
         m.collapseTimer = undefined
         if (this.config.store.sftpPanel.pinned || m.hovering) { return }
-        if (m.resizing || this.isLocked(m)) { this.scheduleCollapse(m); return }
+        if (m.resizing || m.menuOpen || this.isLocked(m)) { this.scheduleCollapse(m); return }
         this.setExpanded(m, false)
     }
 
