@@ -310,7 +310,16 @@ class StreamDownload extends FileDownload {
     .sp-resizer:hover { background: rgba(255,255,255,.15); border-right-color: rgba(255,255,255,.4); }
     .sp-item { cursor: default; }
     .sp-item:hover { background: rgba(255,255,255,.05); }
-    .sp-selected { background: rgba(255,255,255,.13) !important; }
+    /* Unfocused: a dim grey selection. Focused list: an accent tint — the usual
+       file-manager cue for "keystrokes land here". :focus-within, so it also lights up
+       while a child (an inline input) holds focus.
+       Both are TRANSLUCENT and neither sets a text colour: they blend into whatever the
+       theme's background is, so the theme's own foreground stays readable. A solid accent
+       plus a hard-coded white would be unreadable on light themes (and grey-on-white
+       vanishes entirely). */
+    .sp-selected { background: rgba(127,127,127,.35) !important; }
+    .sp-body:focus-within .sp-selected, .sp-transfers:focus-within .sp-selected {
+      background: rgba(13,110,253,.45) !important; }
     .sp-empty { text-align: center; opacity: .6; padding: 12px; }
     .sp-bulk { flex: none; display: flex; align-items: center; gap: 6px; padding: 2px 10px; font-size: 12px; border-top: 1px solid rgba(255,255,255,.1); }
     .sp-bulk > span { opacity: .7; }
