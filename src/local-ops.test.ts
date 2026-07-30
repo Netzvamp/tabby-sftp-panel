@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, writeFileSync, mkdirSync, existsSync, readFileSync, rmSync, symlinkSync } from 'node:fs'
+import { mkdtempSync, writeFileSync, mkdirSync, existsSync, readFileSync, rmSync, symlinkSync, lstatSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
 import { createRequire } from 'node:module'
@@ -264,16 +264,65 @@ test('copying or moving a folder into its own subfolder is refused before anythi
         binned.length = 0
         for (const op of [localCopy, localMove]) {
             const err = await op(vdir + '/b', vdir + '/b/c', true)
-            assert.match(err as string, /destination is inside the item itself/)
+            assert.match(err as string, /one is inside the other/)
         }
         // Case-different spelling of the same subfolder: string comparison misses it on a
         // case-insensitive volume, the dev+ino ancestor walk does not.
         if (existsSync(join(dir, 'B', 'C'))) {
-            assert.match(await localCopy(vdir + '/b', vdir + '/B/C', true) as string, /inside the item itself/)
+            assert.match(await localCopy(vdir + '/b', vdir + '/B/C', true) as string, /one is inside the other/)
         }
         assert.deepEqual(binned, [], 'the destination lives INSIDE the source — it must not be binned')
         assert.equal(readFileSync(join(dir, 'b', 'c', 'b', 'inner.txt')).toString(), 'y')
         assert.equal(readFileSync(join(dir, 'b', 'keep.txt')).toString(), 'x')
+    })
+})
+
+test('a destination that is an ANCESTOR of the source is refused too', async () => {
+    await withTempDir(async (dir, vdir) => {
+        // Flattening <root>/b/b into <root>: `to` is <root>/b, which CONTAINS the source. Raw fs.cp
+        // succeeds on this shape, so nothing downstream would catch it — the guard has to be ours.
+        mkdirSync(join(dir, 'b', 'b'), { recursive: true })
+        writeFileSync(join(dir, 'b', 'b', 'deep.txt'), 'x')
+        writeFileSync(join(dir, 'b', 'sibling.txt'), 'y')
+        binned.length = 0
+        for (const op of [localCopy, localMove]) {
+            assert.match(await op(vdir + '/b/b', vdir, true) as string, /one is inside the other/)
+        }
+        assert.deepEqual(binned, [], 'the destination CONTAINS the source — it must not be binned')
+        assert.equal(readFileSync(join(dir, 'b', 'b', 'deep.txt')).toString(), 'x')
+        assert.equal(readFileSync(join(dir, 'b', 'sibling.txt')).toString(), 'y')
+    })
+})
+
+test('ordinary moves up the tree are not refused by the symmetric check', async () => {
+    await withTempDir(async (dir, vdir) => {
+        // Up one level: the destination is the source's own parent, so `to` IS `from` — caught as
+        // "the same", not as an overlap, and the panel never offers it as an overwrite.
+        mkdirSync(join(dir, 'a', 'b'), { recursive: true })
+        writeFileSync(join(dir, 'a', 'b', 'f.txt'), 'x')
+        assert.match(await localRefusal(vdir + '/a/b', vdir + '/a') as string, /source and the destination are the same/)
+        // Up two levels: `to` lands BESIDE the source's parent, nested in neither direction.
+        assert.equal(await localRefusal(vdir + '/a/b', vdir), null)
+        assert.equal(await localMove(vdir + '/a/b', vdir), null)
+        assert.equal(readFileSync(join(dir, 'b', 'f.txt')).toString(), 'x')
+        assert.equal(existsSync(join(dir, 'a', 'b')), false)
+    })
+})
+
+test('a dangling symlink can still be copied and moved', async (t) => {
+    await withTempDir(async (dir, vdir) => {
+        mkdirSync(join(dir, 'dest'))
+        try {
+            symlinkSync(join(dir, 'nowhere.txt'), join(dir, 'broken'), 'file')
+        } catch (e: any) {
+            if (e.code === 'EPERM') { t.skip('no permission to create links on this machine'); return }
+            throw e
+        }
+        // stat() fails on it, lstat() does not — the source bail must use the fallback or an
+        // ordinary broken link (a visible, selectable row) reads as "the item no longer exists".
+        assert.equal(await localRefusal(vdir + '/broken', vdir + '/dest'), null)
+        assert.equal(await localCopy(vdir + '/broken', vdir + '/dest'), null)
+        assert.equal(lstatSync(join(dir, 'dest', 'broken')).isSymbolicLink(), true)
     })
 })
 
@@ -291,7 +340,7 @@ test('containment is caught through a symlinked destination, which string paths 
         // relative('<root>/b', '<root>/link/c/b') is '../link/c/b' — outside, as far as strings
         // know. Only the dev+ino ancestor walk sees that <root>/link IS <root>/b.
         binned.length = 0
-        assert.match(await localCopy(vdir + '/b', vdir + '/link/c', true) as string, /inside the item itself/)
+        assert.match(await localCopy(vdir + '/b', vdir + '/link/c', true) as string, /one is inside the other/)
         assert.deepEqual(binned, [])
         assert.equal(readFileSync(join(dir, 'b', 'keep.txt')).toString(), 'x')
     })

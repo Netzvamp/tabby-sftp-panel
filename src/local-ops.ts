@@ -14,20 +14,32 @@ function refuseDriveRoot (p: string): string | null {
     return isDriveRoot(p) ? `${p} is a drive root — copy, move and delete are not available for it` : null
 }
 
-/** `fs.stat` or null. STAT, never lstat — see the note on `statOf` below. */
+/** `fs.stat` or null. STAT, which FOLLOWS symlinks — see the coupling note on `localExists`. */
 async function statOf (p: string): Promise<any | null> {
     return fsp.stat(p).then((s: any) => s, () => null)
+}
+
+/** `fs.lstat` or null. Used in exactly one place: the source-side bail, so that a DANGLING
+ *  symlink is still copyable/movable (`fs.cp` with dereference off and `fs.rename` both handle
+ *  one, and `local-fs.session.ts` lists entries with `lstat`, so broken links are selectable
+ *  rows). Never used for the destination — see the coupling note on `localExists`. */
+async function lstatOf (p: string): Promise<any | null> {
+    return fsp.lstat(p).then((s: any) => s, () => null)
 }
 
 /** Whether `destDir` already holds an entry named `name` — the collision check the panel
  *  runs before a local copy/move, since fs.cp/fs.rename overwrite silently and there is no
  *  server-side fallback to recover a clobbered local file from.
  *
- *  COUPLING, do not break: this, `sameEntry` and `clearDestination` must all use the SAME stat
- *  flavour (`stat`, which follows symlinks — not `lstat`). A dangling symlink is safe today only
- *  because all three fail on it identically: it is reported as "no collision", so no prompt, no
- *  removal, and fs.cp/fs.rename deal with it. Switch one of them to `lstat` and that agreement
- *  breaks silently — the prompt would fire for an entry `sameEntry` cannot see. */
+ *  COUPLING, do not break: every DESTINATION-side check — this one, `sameEntry`'s `to` stat and
+ *  `clearDestination` — must use the SAME stat flavour (`stat`, which follows symlinks, not
+ *  `lstat`). A dangling symlink at the destination is safe only because all three fail on it
+ *  identically: it is reported as "no collision", so no prompt, no removal, and fs.cp/fs.rename
+ *  deal with it. Switch one of them to `lstat` and that agreement breaks silently — the prompt
+ *  would fire for an entry `sameEntry` cannot see.
+ *  The SOURCE-side bail in `endpoints` is the deliberate exception (`stat ?? lstat`): a dangling
+ *  link is a real, copyable item, and treating it as "no longer exists" blocked a valid
+ *  operation. It is one-sided on purpose — it never decides whether to remove anything. */
 export async function localExists (destDir: string, name: string): Promise<boolean> {
     try {
         return await statOf(nodePath.join(toNativeFsPath(destDir), name)) !== null
@@ -46,25 +58,23 @@ function sameEntry (a: any, b: any | null): boolean {
     return !!b && a.dev === b.dev && a.ino === b.ino
 }
 
-/** `fs.cp` refuses TWO things, and missing the second one is the same class of bug as missing
- *  the first: copying a directory into a subdirectory of itself (`<root>/b` → `<root>/b/c/b`).
- *  dev+ino of the endpoints compare unequal there, so without this the destination — a path
- *  INSIDE the source tree — would be binned before fs.cp/fs.rename ever got to refuse.
- *
- *  Two passes, because each alone has a hole:
- *   - `nodePath.relative`: pure string work, and it is the only pass that sees a destination
- *     whose ancestors do not exist yet. `win32.relative` folds case; `posix.relative` does not.
- *   - walking `to`'s existing ancestors and comparing dev+ino against the source: exact, and the
- *     pass that survives a differently-cased spelling of a real directory (the Finding A lesson,
- *     applied to containment — it is what covers macOS's case-insensitive default volume, where
- *     posix.relative would compare unequal). */
-async function inside (from: string, srcStat: any, to: string): Promise<boolean> {
-    const rel = nodePath.relative(from, to)
+/** True when `inner` sits inside the tree rooted at `outer`. Two passes, because each alone has
+ *  a hole:
+ *   - `nodePath.relative`: pure string work, and the only pass that sees a path whose ancestors
+ *     do not exist yet. `win32.relative` folds case; `posix.relative` does not.
+ *   - walking `inner`'s existing ancestors and comparing dev+ino against `outer`: exact, and the
+ *     pass that survives a differently-cased spelling of a real directory (the same lesson as
+ *     `sameEntry` — it covers macOS's case-insensitive default volume, where posix.relative
+ *     compares unequal) and a destination reached through a symlink or junction.
+ *  `outerStat` may be null (nothing to compare against — string pass only). */
+async function nests (outer: string, outerStat: any | null, inner: string): Promise<boolean> {
+    const rel = nodePath.relative(outer, inner)
     if (rel !== '' && rel !== '..' && !rel.startsWith('..' + nodePath.sep) && !nodePath.isAbsolute(rel)) { return true }
-    let dir = nodePath.dirname(to)
+    if (!outerStat) { return false }
+    let dir = nodePath.dirname(inner)
     let prev = ''
     while (dir !== prev) {
-        if (sameEntry(srcStat, await statOf(dir))) { return true }
+        if (sameEntry(outerStat, await statOf(dir))) { return true }
         prev = dir
         dir = nodePath.dirname(dir)
     }
@@ -72,7 +82,9 @@ async function inside (from: string, srcStat: any, to: string): Promise<boolean>
 }
 
 const SAME_ENTRY = 'the source and the destination are the same'
-const INSIDE_SELF = 'the destination is inside the item itself'
+// Both directions, one message: it has to read correctly for "folder into its own subfolder" AND
+// for "folder out of a folder that shares its name" (see the OVERLAP check in endpoints).
+const OVERLAP = 'the item and the destination overlap — one is inside the other'
 
 /** Everything that makes a copy/move impossible BEFORE anything is removed: source and
  *  destination resolved natively, or the message to report instead.
@@ -91,13 +103,21 @@ async function endpoints (src: string, destDir: string): Promise<{ from: string,
     } catch (e: any) {
         return e?.message ?? String(e)
     }
-    // One source stat serves three purposes, and it comes first so that a doomed operation never
-    // bins a destination on its way to failing: the vanished-source bail, the identity check and
-    // the containment check.
-    const srcStat = await statOf(from)
-    if (!srcStat) { return `${from} no longer exists` }
-    if (sameEntry(srcStat, await statOf(to))) { return SAME_ENTRY }
-    if (await inside(from, srcStat, to)) { return INSIDE_SELF }
+    // The source stat comes first so that a doomed operation never bins a destination on its way
+    // to failing. `?? lstat`: a DANGLING symlink is a real item that fs.cp/fs.rename can move.
+    const srcStat = await statOf(from) ?? await lstatOf(from)
+    // No path in the message — the panel prefixes failures with the item's own path already.
+    if (!srcStat) { return 'the item no longer exists' }
+    const dstStat = await statOf(to)
+    if (sameEntry(srcStat, dstStat)) { return SAME_ENTRY }
+    // SYMMETRIC, and it has to be. `to` inside `from` is a folder copied into its own subfolder,
+    // which fs.cp at least refuses on its own (ERR_FS_CP_EINVAL). `from` inside `to` is the mirror
+    // — flattening `…/src/src` into `…/`, where `to` is `…/src`, an ANCESTOR of the source — and
+    // there raw fs.cp SUCCEEDS, so nothing downstream would ever catch it: the destination we were
+    // about to bin contains the source. Note the shape this must NOT refuse: moving a folder up
+    // one level. Its destination is the source's own parent, so `to` === `from` and it is caught
+    // upstream as SAME_ENTRY; moving up two levels puts `to` beside the source, nested neither way.
+    if (await nests(from, srcStat, to) || await nests(to, dstStat, from)) { return OVERLAP }
     return { from, to }
 }
 
@@ -116,9 +136,17 @@ export async function localRefusal (src: string, destDir: string): Promise<strin
  *  Returns whether anything was actually binned: `fs.rm({force:true})` used to no-op on a missing
  *  path but `trashItem` rejects, and the window between the collision check and here contains a
  *  MODAL DIALOG — a user who resolves the conflict by deleting the destination in their file
- *  manager and then clicks Overwrite must get a successful copy, not ENOENT. */
+ *  manager and then clicks Overwrite must get a successful copy, not ENOENT.
+ *  Only ENOENT counts as "already gone": any other stat failure (EACCES on the parent, say) is
+ *  reported, because treating it as cleared would silently downgrade the overwrite the user asked
+ *  for into an fs.cp MERGE. */
 async function clearDestination (to: string): Promise<boolean> {
-    if (!await statOf(to)) { return false }
+    try {
+        await fsp.stat(to)
+    } catch (e: any) {
+        if (e?.code === 'ENOENT') { return false }
+        throw e
+    }
     await req('electron').shell.trashItem(to)
     return true
 }

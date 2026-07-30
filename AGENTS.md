@@ -66,13 +66,14 @@ src/
   local-fs.session.ts `LocalFsSession`, duck-types `SFTPSession` over node `fs` so the panel
                       browses a local tab with no call-site changes; streams `upload`/`download`
                       through the same transfer interface
-  local-ops.ts        `localCopy`/`localMove`/`localTrash`/`localExists` — the ops a local tab
-                      does differently: `fs.cp` copy, rename-with-EXDEV-fallback move,
+  local-ops.ts        `localCopy`/`localMove`/`localTrash`/`localExists`/`localRefusal` — the ops
+                      a local tab does differently: `fs.cp` copy, rename-with-EXDEV-fallback move,
                       recycle-bin delete via Electron `shell.trashItem`, and an existence check
                       the panel uses to gate a same-name overwrite behind a confirm prompt.
                       Overwrite means REPLACE (destination goes to the RECYCLE BIN first, files
-                      and dirs alike); drive roots, same-entry (dev+ino) and a destination inside
-                      the source refused up front by `localRefusal`, before any removal
+                      and dirs alike); `localRefusal` reports up front, before any removal and
+                      before the prompt, everything that cannot work: drive roots, a vanished
+                      source, same-entry (dev+ino) and either endpoint nested inside the other
   sftp-util.ts        pure helpers — file type/icon/mode, sort/filter, sizes/times, perms
                       (octalToPerms/permsToOctal), owners (parseLsOwners/parseNames), log
                       (LogEntry/logFullText/computeLogSelection), start-path (resolveStartPath),
@@ -81,7 +82,7 @@ src/
                       (filterLocalCols/effectiveSortColumn)
   logic.ts            dock math (clampSize/dockSize) — clampSize reused for transfer-list height
   *.test.ts           node:test units for sftp-util (32) + logic (4) + i18n (2) + local-path (10)
-                      + local-fs.session (9) + local-ops (23) = 80
+                      + local-fs.session (9) + local-ops (26) = 83
                       i18n.test.ts guards the catalogs: identical msgid sets, no empty msgstr
 docs/superpowers/      specs + plans (design of record)
 _tabby-ref/            full Tabby source, READ-ONLY reference. NOT ours. Ignore in globs.
@@ -97,8 +98,8 @@ loads the built file, not the source.
 ```
 npm run build      # webpack → dist/index.js
 npm run watch      # rebuild on change
-npm test           # tsx --test src/*.test.ts — 80 units (sftp-util 32 + logic 4 + i18n 2 +
-                    # local-path 10 + local-fs.session 9 + local-ops 23)
+npm test           # tsx --test src/*.test.ts — 83 units (sftp-util 32 + logic 4 + i18n 2 +
+                    # local-path 10 + local-fs.session 9 + local-ops 26)
 npx tsc --noEmit -p tsconfig.json   # REQUIRED type-check — build does NOT type-check
 ```
 
@@ -287,21 +288,28 @@ publishing now needs a passkey/WebAuthn; that's the fallback if CI is ever broke
   .resolve` preserves case, so on a case-insensitive volume (Windows, macOS by default) a
   case-different spelling of the folder an item already sits in compares unequal while naming the
   same file, and the removal would then bin the SOURCE (`fs.cp`'s own dev+ino check used to catch
-  this, but the removal now runs first); `fs.cp` refuses a SECOND thing that has to be reproduced
-  for the same reason — a directory copied into its own subtree (`b` → `b/c/b`), where the endpoints'
-  dev+ino differ and the binned path is inside the source, caught by `inside()` with a
-  `nodePath.relative` pass (`win32.relative` folds case, `posix.relative` does not) plus a dev+ino
-  walk of the destination's existing ancestors (the pass that survives macOS's case-insensitive
-  default volume and a symlinked destination); everything that can refuse runs BEFORE the collision
+  this, but the removal now runs first); NESTING has to be refused in BOTH directions by `nests()`
+  — a directory copied into its own subtree (`b` → `b/c/b`, which `fs.cp` at least refuses itself
+  with `ERR_FS_CP_EINVAL`) and the mirror, a destination that is an ANCESTOR of the source
+  (flattening `src/src` into `…/`, where the path about to be binned CONTAINS the source, and where
+  raw `fs.cp` SUCCEEDS so there is no backstop but ours). Each direction runs a `nodePath.relative`
+  pass (`win32.relative` folds case, `posix.relative` does not) plus a dev+ino walk of the inner
+  path's existing ancestors (the pass that survives macOS's case-insensitive default volume and a
+  symlinked destination). Moving a folder UP one level must keep working — it lands on
+  `to === from` and is caught as same-entry, not as nesting. Everything that can refuse runs BEFORE the collision
   prompt, via the exported `localRefusal()`, so a doomed operation is never dressed up as an
   overwrite to confirm, and before the removal, so it never bins for an operation that cannot run;
   (3) a copy/rename that fails after the removal (EBUSY/EACCES on a locked file is routine on
   Windows) says the destination is already in the bin — including the EXDEV leg — since a raw errno
   leaves the user with a vanished folder and no idea where it went; and `clearDestination` treats an
   already-missing destination as already cleared (`fs.rm{force}` no-oped, `trashItem` rejects, and
-  the window between the check and the removal contains a modal dialog). `localExists`, `sameEntry`
-  and `clearDestination` must keep using the SAME stat flavour (`stat`, not `lstat`) — a dangling
-  symlink is safe only because all three fail on it identically. The SSH path
+  the window between the check and the removal contains a modal dialog — only ENOENT counts as
+  already-cleared, since treating an EACCES as one would downgrade the overwrite to an `fs.cp`
+  merge). Every DESTINATION-side check (`localExists`, `sameEntry`'s `to` stat, `clearDestination`)
+  must keep using the SAME stat flavour (`stat`, not `lstat`) — a dangling symlink there is safe
+  only because all three fail on it identically; the SOURCE-side bail is the one deliberate
+  exception (`stat ?? lstat`), because a broken link is a real, selectable, copyable row and
+  `stat` alone reported it as "no longer exists". The SSH path
   (`sftp.rename`, server-side cp/mv)
   deliberately still overwrites silently, as it always has — don't "fix" that asymmetry without
   checking the deferred-decisions note first. **Column/sort gating is view-only:** `filterLocalCols`
