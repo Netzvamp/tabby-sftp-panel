@@ -25,6 +25,9 @@ interface OpenEdit {
   watcher: any | null
   ready: boolean  // false while the first download is still in flight — a re-click during
                   // that window must not treat the record as usable yet.
+  reconnecting: boolean  // true while reconnect() is showing its prompt or polling — guards
+                  // against a second save (rxjs debounce's body isn't cancellable) starting
+                  // a second reconnect for the same file.
 }
 
 @Injectable({ providedIn: 'root' })
@@ -185,6 +188,7 @@ export class LocalEditService {
     const edit: OpenEdit = {
       key, hostKey: host, remotePath: item.fullPath, name: item.name,
       tempDir, tempPath, mode, mtime: +(start?.modified ?? 0), watcher: null, ready: false,
+      reconnecting: false,
     }
     this.openEdits.set(key, edit)
 
@@ -216,7 +220,14 @@ export class LocalEditService {
       if (ev === 'rename') { watcher.close() }
       await this.save(edit)
     })).subscribe()
-    watcher.on('close', () => { edit.watcher = null; events.complete() })
+    watcher.on('close', () => {
+      // 'close' fires on nextTick, after this function returns — so if a newer watcher was
+      // already assigned to edit.watcher (e.g. startWatching ran again in the meantime), this
+      // is the OLD watcher's handler firing late. Only clear the field if it still points at
+      // the watcher that just closed, or we'd null out a live watcher's reference and orphan it.
+      if (edit.watcher === watcher) { edit.watcher = null }
+      events.complete()
+    })
   }
 
   // Push the temp file back to the server. The handle is resolved HERE, not captured when
@@ -245,30 +256,40 @@ export class LocalEditService {
   // that tab's panel registers its SFTP handle with us as soon as it is up, which is what we
   // wait for. Returns null when the user declines or the connection never arrives.
   private async reconnect (edit: OpenEdit): Promise<any | null> {
-    const profile = this.hostProfiles.get(edit.hostKey)
-    if (!profile) { throw new Error(this.translate.instant('No open connection to {host}', { host: edit.hostKey })) }
+    // rxjs debounce's async body isn't cancellable, so a second save event landing while this
+    // one is still inside the prompt/poll below would otherwise start a second reconnect for
+    // the same file — a second message box, a second new tab, two uploads racing once a
+    // handle shows up. Guard it: only one reconnect per edit at a time.
+    if (edit.reconnecting) { return null }
+    edit.reconnecting = true
+    try {
+      const profile = this.hostProfiles.get(edit.hostKey)
+      if (!profile) { throw new Error(this.translate.instant('No open connection to {host}', { host: edit.hostKey })) }
 
-    const r = await this.platform.showMessageBox({
-      type: 'warning',
-      message: this.translate.instant('No open connection to {host}', { host: edit.hostKey }),
-      detail: this.translate.instant('Open a new tab to save {name}?', { name: edit.name }),
-      buttons: [this.translate.instant('Reconnect and save'), this.translate.instant('Cancel')],
-      defaultId: 0, cancelId: 1,
-    })
-    if (r.response !== 0) {
-      this.log.log('warn', this.translate.instant('Upload cancelled: {name}', { name: edit.name }))
-      return null
-    }
+      const r = await this.platform.showMessageBox({
+        type: 'warning',
+        message: this.translate.instant('No open connection to {host}', { host: edit.hostKey }),
+        detail: this.translate.instant('Open a new tab to save {name}?', { name: edit.name }),
+        buttons: [this.translate.instant('Reconnect and save'), this.translate.instant('Cancel')],
+        defaultId: 0, cancelId: 1,
+      })
+      if (r.response !== 0) {
+        this.log.log('warn', this.translate.instant('Upload cancelled: {name}', { name: edit.name }))
+        return null
+      }
 
-    await this.profilesService.openNewTabForProfile(profile)
-    // No event marks "SFTP ready" — the new panel registers itself, so poll for it. 60s covers
-    // an interactive password/2FA prompt in the new tab.
-    for (let i = 0; i < 120 && !this.sessions.any(edit.hostKey); i++) {
-      await new Promise(res => setTimeout(res, 500))
+      await this.profilesService.openNewTabForProfile(profile)
+      // No event marks "SFTP ready" — the new panel registers itself, so poll for it. 60s
+      // covers an interactive password/2FA prompt in the new tab.
+      for (let i = 0; i < 120 && !this.sessions.any(edit.hostKey); i++) {
+        await new Promise(res => setTimeout(res, 500))
+      }
+      const sftp = this.sessions.any(edit.hostKey)
+      if (!sftp) { throw new Error(this.translate.instant('No open connection to {host}', { host: edit.hostKey })) }
+      return sftp
+    } finally {
+      edit.reconnecting = false
     }
-    const sftp = this.sessions.any(edit.hostKey)
-    if (!sftp) { throw new Error(this.translate.instant('No open connection to {host}', { host: edit.hostKey })) }
-    return sftp
   }
 
   // Already checked out: no download, no second temp copy — just point the editor at the file

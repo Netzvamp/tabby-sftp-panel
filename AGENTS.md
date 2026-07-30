@@ -60,7 +60,7 @@ src/
                       columns (moveColumn), editor (parseFtypeExe/isBigFile), server-side cp/mv
                       (shQuote/buildCpCommand/expandDirs)
   logic.ts            dock math (clampSize/dockSize) — clampSize reused for transfer-list height
-  *.test.ts           node:test units for sftp-util (27) + logic (4) + i18n (2) = 33
+  *.test.ts           node:test units for sftp-util (30) + logic (4) + i18n (2) = 36
                       i18n.test.ts guards the catalogs: identical msgid sets, no empty msgstr
 docs/superpowers/      specs + plans (design of record)
 _tabby-ref/            full Tabby source, READ-ONLY reference. NOT ours. Ignore in globs.
@@ -76,7 +76,7 @@ loads the built file, not the source.
 ```
 npm run build      # webpack → dist/index.js
 npm run watch      # rebuild on change
-npm test           # tsx --test src/*.test.ts — 33 units (sftp-util 27 + logic 4 + i18n 2)
+npm test           # tsx --test src/*.test.ts — 36 units (sftp-util 30 + logic 4 + i18n 2)
 npx tsc --noEmit -p tsconfig.json   # REQUIRED type-check — build does NOT type-check
 ```
 
