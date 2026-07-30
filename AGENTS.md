@@ -37,6 +37,8 @@ src/
                       fix, folder-upload aggregation, Stop-button cancel, hides Tabby's popup
   local-edit.service.ts  LocalEditService (providedIn:root) — "edit locally": download→temp, spawn
                       editor (configured exe or OS default), fs.watch → debounced re-upload + chmod;
+                      one temp copy per server+path (reopen reuses it, offers reload when the remote
+                      moved), session registry so a save survives the opening tab closing;
                       Windows .txt-handler auto-detect (UserChoice registry) for settings prefill
   toolbar.ts          SftpPanelHotkeyProvider (declares toggle-sftp-panel) + SftpPanelBootstrap
                       (no visible button; bootstraps mount service + i18n + wires hotkey → focusPanel)
@@ -234,8 +236,12 @@ Shipping. Published on npm (`tabby-sftp-panel`), listed in Tabby's plugin manage
   folder-upload aggregation, per-line Stop, hides Tabby's popup, auto-show on transfer).
 - chmod/chown dialog, copy/move to a destination on the server, and "edit locally" with a
   configurable editor (or OS default) + auto re-upload on save.
-- Edited files are tracked in `LocalEditService.openEdits` (temp dir → remote path + mtime
-  baseline): temp copies are wiped on window unload, a re-upload whose remote mtime moved since
-  the last transfer prompts before overwriting, and a failed re-upload raises a modal naming the
-  temp path (a log line alone got missed). Conflict detection runs on save only — no polling,
-  and no "refresh local" / "keep both" options yet (issue #5).
+- Edited files are tracked in `LocalEditService.openEdits`, keyed by server (`user@host:port`)
+  plus remote path: re-opening a checked-out file reuses its temp copy instead of downloading a
+  second one, and offers a reload when the remote copy moved since our last transfer. A save
+  resolves its SFTP handle from a live-session registry, so closing the tab that opened the file
+  does not orphan it — the temp copy is dropped only when the last session to that server goes.
+  Temp copies are wiped on window unload, a re-upload whose remote mtime moved since the last
+  transfer prompts before overwriting, and a failed re-upload raises a modal naming the temp path.
+  Still open in issue #5: no polling (detection happens on save and on re-open), and no
+  "keep both" conflict option.
