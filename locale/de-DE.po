@@ -358,3 +358,19 @@ msgstr "Neu verbinden und speichern"
 
 msgid "Open a new tab to save {name}?"
 msgstr "Neuen Tab öffnen, um {name} zu speichern?"
+
+# --- Local tabs ---
+msgid "Files"
+msgstr "Dateien"
+
+msgid "Files — hover to open"
+msgstr "Dateien — zum Öffnen mit der Maus darüber"
+
+msgid "Show the panel on local terminal tabs"
+msgstr "Panel auch in lokalen Terminal-Tabs anzeigen"
+
+msgid "Adds the file browser to local shells, backed by the local filesystem."
+msgstr "Fügt den Dateibrowser lokalen Shells hinzu, gestützt auf das lokale Dateisystem."
+
+msgid "{target} already exists."
+msgstr "{target} existiert bereits."

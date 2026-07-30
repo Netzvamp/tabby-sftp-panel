@@ -358,3 +358,19 @@ msgstr "再接続して保存"
 
 msgid "Open a new tab to save {name}?"
 msgstr "{name} を保存するために新しいタブを開きますか?"
+
+# --- Local tabs ---
+msgid "Files"
+msgstr "ファイル"
+
+msgid "Files — hover to open"
+msgstr "ファイル — カーソルを合わせて開く"
+
+msgid "Show the panel on local terminal tabs"
+msgstr "ローカルターミナルのタブでもパネルを表示"
+
+msgid "Adds the file browser to local shells, backed by the local filesystem."
+msgstr "ローカルファイルシステムを使ったファイルブラウザーをローカルシェルに追加します。"
+
+msgid "{target} already exists."
+msgstr "{target} は既に存在します。"

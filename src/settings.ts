@@ -58,6 +58,13 @@ const req = (window as any).require
     </div>
     <div class="form-line">
       <div class="header">
+        <div class="title">{{ 'Show the panel on local terminal tabs' | translate }}</div>
+        <div class="description">{{ 'Adds the file browser to local shells, backed by the local filesystem.' | translate }}</div>
+      </div>
+      <toggle [(ngModel)]="config.store.sftpPanel.localTabs" (ngModelChange)="config.save()"></toggle>
+    </div>
+    <div class="form-line">
+      <div class="header">
         <div class="title">{{ 'Show vertical label on collapsed strip' | translate }}</div>
         <div class="description">{{ 'The "SFTP Panel" text on the hover strip (unpinned). Off makes the strip thinner.' | translate }}</div>
       </div>

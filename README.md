@@ -33,6 +33,11 @@ SFTP panel rather than replacing it.
   editor (or the OS default), and auto re-upload on save.
 - **Drag-out** — drag files and folders straight out of the panel to your
   desktop or file manager.
+- **Local tabs, too** — the panel also appears on local terminal tabs, browsing the
+  local filesystem starting in the shell's working directory. Upload/download buttons
+  stay hidden (source and destination are the same machine), copy/move runs over the
+  filesystem instead of the server, and deletes go to the recycle bin; turn it off with
+  the "Show the panel on local terminal tabs" setting.
 - **i18n** — ships German plus 6 additional languages (zh-CN, ru-RU, es-ES,
   fr-FR, ja-JP, pt-BR), merged on top of Tabby's own catalog.
 
@@ -78,13 +83,14 @@ All settings live under Tabby → Settings → **SFTP Panel** (config key `sftpP
 | `pinned` | `false` | `true` docks the panel (terminal shrinks); `false` overlays on hover. |
 | `spineLabel` | `true` | Show the vertical "SFTP Panel" label on the collapsed strip. |
 | `width` | `420` | Expanded panel width, in px. |
-| `startDirectory` | `~` | First-open folder — absolute path or `~` for the remote home. |
+| `startDirectory` | `~` | First-open folder — absolute path or `~` for the remote home (on a local tab, the shell's working directory). |
 | `showHidden` | `true` | Show dotfiles. |
 | `fileClickAction` | `edit` | Double-click behavior: `edit` or `download`. |
 | `editorEnabled` | `false` | Master switch for "edit locally". Off = OS default app. |
 | `editorPath` | `''` | Editor executable when enabled; blank = OS default. |
 | `editorMaxSizeMB` | `1` | Warn before opening a file larger than this; `0` = never. |
 | `transfersAutoShow` | `true` | Auto-open the transfer list on an upload/download. |
+| `localTabs` | `true` | Also mount the panel on local terminal tabs. |
 
 Columns, sort order, column order/widths, and transfer-list height are all
 adjustable in the UI and persisted automatically.

@@ -3,6 +3,7 @@ import { AppService, ConfigService, PlatformService } from 'tabby-core'
 import { SftpPanelComponent } from './panel.component'
 import { LogService } from './log.service'
 import { dockSize } from './logic'
+import { LocalFsSession } from './local-fs.session'
 
 const STRIP = 24  // collapsed strip width (px) with the vertical label
 const STRIP_SLIM = 8  // collapsed strip width (px) when the label is hidden
@@ -32,6 +33,10 @@ export class PanelMountService {
     // tab, spanning full height beside the whole split, not a small one inside each pane.
     private mounts = new WeakMap<object, Mounted>()
     private watched = new WeakSet<object>()
+    // One stable wrapper per local pane. Stability matters: setSession() treats a
+    // different object as a reconnect and drops the open handle, so handing out a fresh
+    // wrapper on every focus change would reopen the listing each time.
+    private localSessions = new WeakMap<object, any>()
 
     constructor (
         private app: AppService,
@@ -44,6 +49,7 @@ export class PanelMountService {
         this.sweepTabs()
         this.app.tabOpened$.subscribe(() => this.sweepTabs())
         this.app.tabsChanged$.subscribe(() => this.sweepTabs())
+        this.config.changed$.subscribe(() => this.syncMounts())
         // Esc collapses a hover-opened panel too (focus is still in the terminal then, so the
         // panel's own handler never sees the key). Don't consume the event — the terminal
         // still gets Esc. Skip when focus is inside the panel (its component handles that).
@@ -65,19 +71,51 @@ export class PanelMountService {
         return !!tab && typeof tab.openSFTP === 'function' && 'sshSession' in tab
     }
 
+    // A local terminal tab (tabby-local sets profile.type — see _tabby-ref/tabby-local/
+    // src/profiles.ts:42). Gated on the config flag so turning it off removes the panel.
+    private isLocalTab (tab: any): boolean {
+        return !!tab && tab.profile?.type === 'local' && !!this.config.store?.sftpPanel?.localTabs
+    }
+
+    private isFsTab (tab: any): boolean {
+        return this.isSSHTab(tab) || this.isLocalTab(tab)
+    }
+
     private allTabs (topTab: any): any[] {
         return typeof topTab.getAllTabs === 'function' ? topTab.getAllTabs() : [topTab]
     }
 
-    private sshPanes (topTab: any): any[] {
-        return this.allTabs(topTab).filter(t => this.isSSHTab(t))
+    private fsPanes (topTab: any): any[] {
+        return this.allTabs(topTab).filter(t => this.isFsTab(t))
     }
 
-    // The SSH pane whose SFTP the panel should show: the focused one, else the first.
-    private focusedSSHPane (topTab: any): any | null {
+    // The pane whose filesystem the panel should show: the focused one, else the first.
+    // In a mixed split (SSH + local) the focused pane therefore wins.
+    private focusedFsPane (topTab: any): any | null {
         const f = typeof topTab.getFocusedTab === 'function' ? topTab.getFocusedTab() : topTab
-        if (this.isSSHTab(f)) { return f }
-        return this.sshPanes(topTab)[0] ?? null
+        if (this.isFsTab(f)) { return f }
+        return this.fsPanes(topTab)[0] ?? null
+    }
+
+    // The session object to hand the panel for a pane: the live SSHSession, or a stable
+    // filesystem wrapper that duck-types just enough of it.
+    private sessionFor (pane: any): any | null {
+        if (this.isSSHTab(pane)) { return pane.sshSession ?? null }
+        if (this.isLocalTab(pane)) { return this.localWrapper(pane) }
+        return null
+    }
+
+    private localWrapper (pane: any): any {
+        let w = this.localSessions.get(pane)
+        if (!w) {
+            w = {
+                local: true,
+                openSFTP: async () => new LocalFsSession(),
+                getCwd: () => pane.session?.getWorkingDirectory?.() ?? Promise.resolve(null),
+            }
+            this.localSessions.set(pane, w)
+        }
+        return w
     }
 
     // The <split-tab> DOM element for a top-level tab. BaseTabComponent has NO `.element`
@@ -86,7 +124,7 @@ export class PanelMountService {
     private splitTabEl (topTab: any): HTMLElement | null {
         const rn = (topTab.hostView as any)?.rootNodes
         if (rn && rn[0] instanceof HTMLElement) { return rn[0] }
-        const paneEl = this.focusedSSHPane(topTab)?.element?.nativeElement as HTMLElement | undefined
+        const paneEl = this.focusedFsPane(topTab)?.element?.nativeElement as HTMLElement | undefined
         return paneEl?.parentElement ?? null
     }
 
@@ -110,8 +148,17 @@ export class PanelMountService {
 
     private ensureMounted (topTab: any): void {
         if (this.mounts.get(topTab)) { return }
-        if (!this.sshPanes(topTab).length) { return }
+        if (!this.fsPanes(topTab).length) { return }
         this.mount(topTab)
+    }
+
+    // localTabs was toggled off → drop panels from tabs that no longer qualify; toggled
+    // on → mount the ones that now do. (Layout changes are handled per-mount already.)
+    private syncMounts (): void {
+        for (const top of this.app.tabs) {
+            if (this.mounts.get(top) && !this.fsPanes(top).length) { this.unmount(top) }
+        }
+        this.sweepTabs()
     }
 
     // Hotkey action: reveal the active tab's panel (expand it if it's a collapsed strip) and
@@ -166,8 +213,8 @@ export class PanelMountService {
         container.appendChild(host)
 
         const ref = createComponent(SftpPanelComponent, { environmentInjector: this.injector, hostElement: host })
-        const pane0 = this.focusedSSHPane(topTab)
-        ref.instance.session = pane0?.sshSession ?? null
+        const pane0 = this.focusedFsPane(topTab)
+        ref.instance.session = this.sessionFor(pane0)
         ref.instance.shellSession = pane0?.session ?? null
         this.appRef.attachView(ref.hostView)
 
@@ -213,13 +260,13 @@ export class PanelMountService {
         const subs: any[] = []
         subs.push(topTab.destroyed$?.subscribe?.(() => this.unmount(topTab)))
         const updateSession = () => {
-            const pane = this.focusedSSHPane(topTab)
-            const s = pane?.sshSession
+            const pane = this.focusedFsPane(topTab)
+            const s = pane && this.sessionFor(pane)
             if (s) { ref.instance.shellSession = pane?.session ?? null; ref.instance.setSession(s) }
         }
         subs.push(topTab.focusChanged$?.subscribe?.(updateSession))
         subs.push(topTab.tabAdded$?.subscribe?.(updateSession))
-        for (const p of this.sshPanes(topTab)) { subs.push(p.sessionChanged$?.subscribe?.(updateSession)) }
+        for (const p of this.fsPanes(topTab)) { subs.push(p.sessionChanged$?.subscribe?.(updateSession)) }
         subs.push(this.config.changed$.subscribe(() => this.applyLayout(mounted)))
         ;(mounted as any).subs = subs
 

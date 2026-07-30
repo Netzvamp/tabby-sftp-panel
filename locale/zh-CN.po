@@ -358,3 +358,19 @@ msgstr "重新连接并保存"
 
 msgid "Open a new tab to save {name}?"
 msgstr "打开新标签页以保存 {name}？"
+
+# --- Local tabs ---
+msgid "Files"
+msgstr "文件"
+
+msgid "Files — hover to open"
+msgstr "文件 — 悬停以打开"
+
+msgid "Show the panel on local terminal tabs"
+msgstr "在本地终端标签页中显示面板"
+
+msgid "Adds the file browser to local shells, backed by the local filesystem."
+msgstr "将文件浏览器添加到本地 shell，基于本地文件系统。"
+
+msgid "{target} already exists."
+msgstr "{target} 已存在。"

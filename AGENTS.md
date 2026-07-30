@@ -8,15 +8,17 @@
 ## What this is
 
 `tabby-sftp-panel` — a **standalone** SFTP panel plugin for [Tabby](https://github.com/Eugeny/tabby)
-(Electron terminal). It mounts its own Angular 15 component into each SSH tab and
-reuses Tabby's services via DI. It does **not** patch Tabby's built-in SFTP panel —
-the two coexist, which is what makes it publishable.
+(Electron terminal). It mounts its own Angular 15 component into each SSH tab — and,
+backed by the local filesystem instead of SFTP, each local terminal tab — and reuses
+Tabby's services via DI. It does **not** patch Tabby's built-in SFTP panel — the two
+coexist, which is what makes it publishable.
 
 Config key: `sftpPanel`. **No titlebar button** — the panel is a permanent
-collapsed edge strip (24px) on every SSH pane that expands on hover. `pinned` = docked
-(reserves width, terminal shrinks); unpinned = strip that overlays the terminal on hover.
-Hotkey `toggle-sftp-panel` ("Focus SFTP Panel") reveals + focuses the active pane's panel;
-Esc collapses a hover-opened one.
+collapsed edge strip (24px) on every SSH pane, and (gated on `localTabs`, on by default)
+every local terminal pane too, that expands on hover. `pinned` = docked (reserves width,
+terminal shrinks); unpinned = strip that overlays the terminal on hover. Hotkey
+`toggle-sftp-panel` ("Focus SFTP Panel") reveals + focuses the active pane's panel; Esc
+collapses a hover-opened one.
 
 ## Layout
 
@@ -27,11 +29,14 @@ src/
                       CommonModule/FormsModule/NgbModule/TabbyCoreModule
   config.ts           sftpPanel defaults — side, pinned, width, startDirectory, showHidden,
                       fileClickAction, editorEnabled/editorPath/editorMaxSizeMB, sort, columns,
-                      columnOrder, transfersVisible/transfersHeight/transfersAutoShow
+                      columnOrder, transfersVisible/transfersHeight/transfersAutoShow, localTabs
+                      (also mount the panel on local terminal tabs; on by default)
   panel.component.ts  SftpPanelComponent — the panel UI (inline template+styles). The big one.
-  mount.service.ts    PanelMountService — dynamic createComponent() into each SSH pane's DOM;
-                      collapsed 24px edge strip + hover-expand, pin/dock vs overlay, Esc-collapse,
-                      per-pane in split tabs, startup-restored splits (initialized$), teardown
+  mount.service.ts    PanelMountService — dynamic createComponent() into each SSH pane's DOM,
+                      and each local terminal pane's (`tab.profile?.type === 'local'`, gated on
+                      config `localTabs`); collapsed 24px edge strip + hover-expand, pin/dock vs
+                      overlay, Esc-collapse, per-pane in split tabs, startup-restored splits
+                      (initialized$), teardown
   log.service.ts      LogService (providedIn:root) — unified panel log: file transfers (Tabby's
                       platform stream) + messages (chmod/copy/move failures, notices); render-lag
                       fix, folder-upload aggregation, Stop-button cancel, hides Tabby's popup
@@ -48,19 +53,36 @@ src/
                       .localeChanged$. Only ships strings Tabby lacks; shared labels reuse Tabby's.
 ../locale/*.po      our gettext catalogs — at the REPO ROOT, not under src/ (de-DE, zh-CN,
                       ru-RU, es-ES, fr-FR, ja-JP, pt-BR).
-                      gap strings only, 115 msgid each, identical key sets. built via json-loader +
+                      gap strings only, 120 msgid each, identical key sets. built via json-loader +
                       po-gettext-loader (webpack .po rule) — same chain Tabby uses. i18n.service
                       picks up new langs automatically (dynamic require → webpack context).
   settings.ts         settings tab for sftpPanel
   chmod-dialog.component.ts     ChmodDialogComponent — permissions (rwx grid) + owner/group modal
   copy-move-dialog.component.ts CopyMoveDialogComponent — destination input + Copy/Move buttons
+  local-path.ts       virtual posix ↔ native path conversion (`/C:/Users/x` ↔ `C:\Users\x`),
+                      drive-root enumeration + `isDriveRoot`, and `toNativeFsPath` — the guarded
+                      conversion EVERY fs call must use; pure, `window`-free so `node:test`
+                      can import it
+  local-fs.session.ts `LocalFsSession`, duck-types `SFTPSession` over node `fs` so the panel
+                      browses a local tab with no call-site changes; streams `upload`/`download`
+                      through the same transfer interface
+  local-ops.ts        `localCopy`/`localMove`/`localTrash`/`localExists`/`localRefusal` — the ops
+                      a local tab does differently: `fs.cp` copy, rename-with-EXDEV-fallback move,
+                      recycle-bin delete via Electron `shell.trashItem`, and an existence check
+                      the panel uses to gate a same-name overwrite behind a confirm prompt.
+                      Overwrite means REPLACE (destination goes to the RECYCLE BIN first, files
+                      and dirs alike); `localRefusal` reports up front, before any removal and
+                      before the prompt, everything that cannot work: drive roots, a vanished
+                      source, same-entry (dev+ino) and either endpoint nested inside the other
   sftp-util.ts        pure helpers — file type/icon/mode, sort/filter, sizes/times, perms
                       (octalToPerms/permsToOctal), owners (parseLsOwners/parseNames), log
                       (LogEntry/logFullText/computeLogSelection), start-path (resolveStartPath),
                       columns (moveColumn), editor (parseFtypeExe/isBigFile), server-side cp/mv
-                      (shQuote/buildCpCommand/expandDirs)
+                      (shQuote/buildCpCommand/expandDirs), local-tab column/sort gating
+                      (filterLocalCols/effectiveSortColumn)
   logic.ts            dock math (clampSize/dockSize) — clampSize reused for transfer-list height
-  *.test.ts           node:test units for sftp-util (30) + logic (4) + i18n (2) = 36
+  *.test.ts           node:test units for sftp-util (32) + logic (4) + i18n (2) + local-path (10)
+                      + local-fs.session (9) + local-ops (26) = 83
                       i18n.test.ts guards the catalogs: identical msgid sets, no empty msgstr
 docs/superpowers/      specs + plans (design of record)
 _tabby-ref/            full Tabby source, READ-ONLY reference. NOT ours. Ignore in globs.
@@ -76,9 +98,19 @@ loads the built file, not the source.
 ```
 npm run build      # webpack → dist/index.js
 npm run watch      # rebuild on change
-npm test           # tsx --test src/*.test.ts — 36 units (sftp-util 30 + logic 4 + i18n 2)
+npm test           # tsx --test src/*.test.ts — 83 units (sftp-util 32 + logic 4 + i18n 2 +
+                    # local-path 10 + local-fs.session 9 + local-ops 26)
 npx tsc --noEmit -p tsconfig.json   # REQUIRED type-check — build does NOT type-check
 ```
+
+`src/package.json` (`{"type": "module"}`) scopes ESM module resolution to everything under
+`src/` — it exists only so `*.test.ts` files can use a top-level `await` (e.g. shimming
+`window.require` before a dynamic `import()` of the module under test); esbuild (via `tsx`)
+cannot emit top-level await when the resolved output format is CommonJS, which is what the
+untyped root `package.json` defaults to. The root `package.json` deliberately stays untyped:
+`webpack.config.js` uses `require`/`module.exports` and the built `dist/index.js` is UMD,
+loaded by Tabby via `require()` — flipping the root to ESM would break both. `files: ["dist"]`
+keeps `src/package.json` out of the published tarball (verify with `npm pack --dry-run`).
 
 **Build gate blind spot:** webpack uses `ts-loader { transpileOnly: true }` → no type
 check, no AOT template compile (Ivy runs JIT at runtime). A green `npm run build`
@@ -222,6 +254,76 @@ publishing now needs a passkey/WebAuthn; that's the fallback if CI is ever broke
   panel renders a single aggregate row (`dropTransfers` the children without cancelling +
   `addTransfer` the aggregate). `swapTransfer` repoints a row to a cancellable proxy so the
   log-line Stop button actually aborts an in-flight transfer.
+- **Local tabs and path flavour.** The panel imports `posix as path`, and `posix.resolve('C:/a/b',
+  '..')` does not recognise `C:/` as a root — it prepends `process.cwd()` and returns garbage. So
+  `LocalFsSession` presents *virtual* posix paths (`/C:/Users/x`) and converts to native only at
+  the fs boundary; `/` is a synthetic root whose listing is the drive list (probe `A:\`…`Z:\` with
+  `existsSync` — no `wmic`). **`toNativePath` relativises anything not rooted at a drive**
+  (`/foo` → `foo`, and UNC flattens to the same shape), which every `fs` call would then resolve
+  against Tabby's own cwd, i.e. write into the install directory — so every fs boundary uses
+  `toNativeFsPath`, which throws instead. Two rows/paths are navigable and NOTHING else, guarded in
+  the panel and backstopped in `local-ops.ts`: the virtual root (`atVirtualRoot()` hides create
+  file/dir and ignores drops — you cannot create "in" a drive list) and a drive row (`isDriveRoot`,
+  because `win32.basename('C:\\')` is `''`, so `join(dest, '')` is `dest` and a "copy C:" would
+  clone the whole drive over it). **`setSession` resets `this.path` when the swap crosses the
+  local/remote boundary** (mixed splits): the same-flavour reconnect deliberately restores its
+  folder, but carrying `/home/rob` from an SSH pane onto the local filesystem silently shows a
+  different, identical-looking directory. A local pane is detected by `tab.profile?.type === 'local'` and handed
+  a **stable** wrapper object (cached per pane in a `WeakMap`): `setSession()` treats a different
+  object as a reconnect and drops the open handle, so a fresh wrapper per focus change would reopen
+  the listing every time. Local sessions have no `shell` field, so `openIfReady`'s shell-channel
+  wait must be skipped or it burns its full 5s cap before the panel works. Everything reached
+  through `exec()` (home resolve, `ls -l` owners, root detect, chown) degrades on its own —
+  `exec()` returns `null` without an `ssh` object. **Local overwrite confirm is one-sided:** before
+  a local-tab copy/move overwrites a same-named destination, `local-ops.ts`'s `localExists()` gates
+  a confirm prompt (overwrite / skip / cancel, asked once per colliding item — no "apply to all",
+  see `confirmLocalOverwrite` in panel.component.ts) and **"Overwrite" means REPLACE** — local-ops
+  removes the destination first, because `fs.rename` cannot replace a non-empty directory
+  (EPERM on win32, ENOTEMPTY on posix) and `fs.cp {recursive, force}` MERGES into one; the
+  prompt's wording cannot say "merge" without a new msgid in all seven catalogs. Three rules hang
+  off that removal, all of them paid for in blood: (1) it goes through the **recycle bin**
+  (`shell.trashItem`, the same call `localTrash` uses) — consenting to Overwrite is not consent to
+  a permanent delete, and a bin that fails is reported, never downgraded to `fs.rm`; (2) same-entry
+  is detected by **`fs.stat` dev+ino, never by comparing resolved path strings** — `path.win32
+  .resolve` preserves case, so on a case-insensitive volume (Windows, macOS by default) a
+  case-different spelling of the folder an item already sits in compares unequal while naming the
+  same file, and the removal would then bin the SOURCE (`fs.cp`'s own dev+ino check used to catch
+  this, but the removal now runs first); NESTING has to be refused in BOTH directions by `nests()`
+  — a directory copied into its own subtree (`b` → `b/c/b`, which `fs.cp` at least refuses itself
+  with `ERR_FS_CP_EINVAL`) and the mirror, a destination that is an ANCESTOR of the source
+  (flattening `src/src` into `…/`, where the path about to be binned CONTAINS the source, and where
+  raw `fs.cp` SUCCEEDS so there is no backstop but ours). Each direction runs a `nodePath.relative`
+  pass (`win32.relative` folds case, `posix.relative` does not) plus a dev+ino walk of the inner
+  path's existing ancestors (the pass that survives macOS's case-insensitive default volume and a
+  symlinked destination). The ordinary move UP one level — into the parent of the directory the item
+  sits in — must keep working: `to` lands beside that directory, nested neither way. (Into the
+  directory it already sits in, `to === from`: a no-op, refused as same-entry.)
+  Everything that can refuse runs BEFORE the collision
+  prompt, via the exported `localRefusal()`, so a doomed operation is never dressed up as an
+  overwrite to confirm, and before the removal, so it never bins for an operation that cannot run;
+  (3) a copy/rename that fails after the removal (EBUSY/EACCES on a locked file is routine on
+  Windows) says the destination is already in the bin — including the EXDEV leg — since a raw errno
+  leaves the user with a vanished folder and no idea where it went; and `clearDestination` treats an
+  already-missing destination as already cleared (`fs.rm{force}` no-oped, `trashItem` rejects, and
+  the window between the check and the removal contains a modal dialog — only ENOENT counts as
+  already-cleared, since treating an EACCES as one would downgrade the overwrite to an `fs.cp`
+  merge). Every DESTINATION-side check (`localExists`, `sameEntry`'s `to` stat, `clearDestination`)
+  must keep using the SAME stat flavour (`stat`, not `lstat`) — a dangling symlink there is safe
+  only because all three fail on it identically; the SOURCE-side bail is the one deliberate
+  exception (`stat ?? lstat`), because a broken link is a real, selectable, copyable row and
+  `stat` alone reported it as "no longer exists". The SSH path
+  (`sftp.rename`, server-side cp/mv)
+  deliberately still overwrites silently, as it always has — don't "fix" that asymmetry without
+  checking the deferred-decisions note first. **Column/sort gating is view-only:** `filterLocalCols`
+  and `effectiveSortColumn` in `sftp-util.ts` are the single source of truth for which columns a
+  local tab shows (owner/group hidden everywhere, permissions posix-only) and which column it
+  actually sorts by; the sort coercion (owner/group → name) happens at the view layer and is never
+  written back to config, so an SSH tab elsewhere keeps its own owner/group sort untouched.
+  **Virtual paths never reach the user:** anything shown or prefilled on a local tab goes through
+  `displayPath()`/`toNativePath` (Copy path, both overwrite prompts, the Copy/Move destination
+  field, copy/move log lines), and the dialog's answer is converted back with `toVirtualPath`
+  (idempotent, so a typed virtual path still works). The drag-in collision prompt reuses the
+  copy/move msgid `'{target} already exists.'` locally — `'…on the server.'` is remote-only.
 
 ## Status
 
@@ -247,3 +349,7 @@ Shipping. Published on npm (`tabby-sftp-panel`), listed in Tabby's plugin manage
   before overwriting, and a failed re-upload still raises a modal naming the temp path. Still open
   in issue #5: no polling (detection happens on save and on re-open), and no "keep both" conflict
   option.
+- The panel also runs on local terminal tabs as a plain file explorer (`localTabs`, on by
+  default), backed by the local filesystem; upload/download affordances and the owner/group
+  columns are hidden there, chmod is posix-only, delete goes to the recycle bin, and "edit
+  locally" becomes a direct editor spawn with no temp copy.
