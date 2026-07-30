@@ -17,7 +17,7 @@ import { LogService } from './log.service'
 import { ChmodDialogComponent } from './chmod-dialog.component'
 import { CopyMoveDialogComponent } from './copy-move-dialog.component'
 import { LocalEditService } from './local-edit.service'
-import { toVirtualPath } from './local-path'
+import { toVirtualPath, toNativePath, isWin } from './local-path'
 import { localCopy, localMove, localTrash, localExists } from './local-ops'
 
 type Col = 'name' | 'size' | 'modified' | 'owner' | 'group' | 'perms'
@@ -184,7 +184,7 @@ class StreamDownload extends FileDownload {
 @Component({
     selector: 'sftp-panel-plugin',
     template: `
-    <div class="sp-spine" *ngIf="collapsed" [title]="'SFTP Panel — hover to open' | translate"><span *ngIf="config.store.sftpPanel.spineLabel">SFTP Panel</span></div>
+    <div class="sp-spine" *ngIf="collapsed" [title]="(isLocal ? 'Files — hover to open' : 'SFTP Panel — hover to open') | translate"><span *ngIf="config.store.sftpPanel.spineLabel">{{ (isLocal ? 'Files' : 'SFTP Panel') | translate }}</span></div>
     <ng-container *ngIf="!collapsed">
     <div class="sp-header">
       <input *ngIf="editingPath !== null" class="form-control flex-grow-1" type="text" autofocus
@@ -200,8 +200,8 @@ class StreamDownload extends FileDownload {
       <button class="btn btn-link btn-sm" [title]="(showHidden ? 'Hide dotfiles' : 'Show dotfiles') | translate" (click)="toggleHidden()">
         <i class="fas" [class.fa-eye]="showHidden" [class.fa-eye-slash]="!showHidden"></i>
       </button>
-      <button class="btn btn-link btn-sm" [title]="'Upload files' | translate" (click)="upload()"><i class="fas fa-upload"></i></button>
-      <button class="btn btn-link btn-sm" [title]="'Upload folder' | translate" (click)="uploadFolder()"><i class="fas fa-folder-plus"></i></button>
+      <button class="btn btn-link btn-sm" *ngIf="!isLocal" [title]="'Upload files' | translate" (click)="upload()"><i class="fas fa-upload"></i></button>
+      <button class="btn btn-link btn-sm" *ngIf="!isLocal" [title]="'Upload folder' | translate" (click)="uploadFolder()"><i class="fas fa-folder-plus"></i></button>
       <button class="btn btn-link btn-sm" [title]="'File transfers' | translate" (click)="showTransfers = !showTransfers"><i class="fas fa-exchange-alt"></i></button>
     </div>
 
@@ -259,7 +259,7 @@ class StreamDownload extends FileDownload {
       <span *ngIf="selection.size > 0">· {{selection.size}} {{ 'selected' | translate }}<ng-container *ngIf="selectedSize() > 0"> ({{sizeText(selectedSize())}})</ng-container></span>
       <span class="flex-grow-1"></span>
       <ng-container *ngIf="selectedItems().length > 1">
-        <button class="btn btn-sm btn-link" (click)="downloadSelected()"><i class="fas fa-download me-1"></i>{{ 'Download' | translate }}</button>
+        <button class="btn btn-sm btn-link" *ngIf="!isLocal" (click)="downloadSelected()"><i class="fas fa-download me-1"></i>{{ 'Download' | translate }}</button>
         <button class="btn btn-sm btn-link text-danger" (click)="deleteSelected()"><i class="fas fa-trash me-1"></i>{{ 'Delete' | translate }}</button>
       </ng-container>
     </div>
@@ -419,7 +419,13 @@ export class SftpPanelComponent implements OnDestroy {
     private dragCol: Col | null = null
 
     get columnOrder (): Col[] { return this.config.store.sftpPanel.columnOrder }
-    orderedCols (): Col[] { return this.columnOrder.filter(k => this.col[k].visible) }
+    orderedCols (): Col[] {
+        const cols = this.columnOrder.filter(k => this.col[k].visible)
+        if (!this.isLocal) { return cols }
+        // Owner/group are ls -l derived (SSH exec only). Permissions are meaningless on
+        // Windows, where fs.chmod only toggles the read-only bit.
+        return cols.filter(k => k !== 'owner' && k !== 'group' && !(isWin && k === 'perms'))
+    }
     cellClass (k: Col): string { return this.cellClasses[k] }
     onHeaderClick (k: Col): void { if (k !== 'perms') { this.setSort(k as SortColumn) } }  // perms not sortable
 
@@ -705,8 +711,7 @@ export class SftpPanelComponent implements OnDestroy {
 
     // ---- columns ----
     tableWidth (): number {
-        const c = this.col
-        return this.columnOrder.reduce((w, k) => w + (c[k].visible ? c[k].width : 0), 0)
+        return this.orderedCols().reduce((w, k) => w + this.col[k].width, 0)
     }
     startColResize (key: Col, ev: MouseEvent): void {
         ev.preventDefault(); ev.stopPropagation()
@@ -1001,7 +1006,13 @@ export class SftpPanelComponent implements OnDestroy {
         }
         const opener = exe ? this.localEdit.spawnOpener(exe) : this.localEdit.defaultOpener
         try {
-            await this.localEdit.edit(this.sftp, item, mode, size, opener)
+            if (this.isLocal) {
+                // The file is already local: spawn the editor on it directly. No temp copy,
+                // no fs.watch, no re-upload, no conflict handling.
+                await opener(toNativePath(item.fullPath))
+            } else {
+                await this.localEdit.edit(this.sftp, item, mode, size, opener)
+            }
         } catch (e: any) {
             this.log.log('error', this.translate.instant('Could not open {name}', { name: item.name }), e?.message)
         }
@@ -1010,7 +1021,11 @@ export class SftpPanelComponent implements OnDestroy {
     // Per-file override: always open with the OS default app, bypassing the configured editor.
     async openWithDefault (item: SFTPFile, mode: number, size: number): Promise<void> {
         try {
-            await this.localEdit.edit(this.sftp, item, mode, size, this.localEdit.defaultOpener)
+            if (this.isLocal) {
+                await this.localEdit.defaultOpener(toNativePath(item.fullPath))
+            } else {
+                await this.localEdit.edit(this.sftp, item, mode, size, this.localEdit.defaultOpener)
+            }
         } catch (e: any) {
             this.log.log('error', this.translate.instant('Could not open {name}', { name: item.name }), e?.message)
         }
@@ -1019,14 +1034,16 @@ export class SftpPanelComponent implements OnDestroy {
     // ---- context menu ----
     async buildContextMenu (item: SFTPFile): Promise<MenuItemOptions[]> {
         let items: MenuItemOptions[] = []
-        for (const section of await Promise.all(this.contextMenuProviders.map(x => x.getItems(item, this as any)))) {
-            items.push({ type: 'separator' })
-            items = items.concat(section)
+        if (!this.isLocal) {
+            for (const section of await Promise.all(this.contextMenuProviders.map(x => x.getItems(item, this as any)))) {
+                items.push({ type: 'separator' })
+                items = items.concat(section)
+            }
+            items = items.slice(1)
+            // Drop Tabby's built-in "Edit locally" (it ignores our configured editor); add our own.
+            // translate.instant gives the current-locale string, so this matches regardless of language.
+            items = items.filter(i => i.label !== this.translate.instant('Edit locally'))
         }
-        items = items.slice(1)
-        // Drop Tabby's built-in "Edit locally" (it ignores our configured editor); add our own.
-        // translate.instant gives the current-locale string, so this matches regardless of language.
-        items = items.filter(i => i.label !== this.translate.instant('Edit locally'))
         if (!item.isDirectory) {
             // Primary actions grouped at the very top: Open, then (when a configured editor is
             // active) the OS-default-app override directly beneath it.
@@ -1041,7 +1058,15 @@ export class SftpPanelComponent implements OnDestroy {
         items.push({ label: this.translate.instant('Rename…'), click: () => this.renameItem(item) })
         items.push({ label: this.translate.instant('Copy / Move…'), click: () => this.copyMoveSelected(item) })
         items.push({ label: this.translate.instant('Copy path'), click: () => this.copyPath(item) })
-        items.push({ label: this.translate.instant('Permissions…'), click: () => this.openChmodDialog(item) })
+        // Windows chmod only toggles the read-only bit, so an rwx grid there would be a lie.
+        if (!(this.isLocal && isWin)) {
+            items.push({ label: this.translate.instant('Permissions…'), click: () => this.openChmodDialog(item) })
+        }
+        // Tabby's SFTP providers supply Delete on remote tabs; local tabs have no providers.
+        if (this.isLocal) {
+            items.push({ type: 'separator' })
+            items.push({ label: this.translate.instant('Delete'), click: () => this.deleteSelected() })
+        }
         // Collapse any adjacent or trailing separators (filtering Tabby's item can strand one).
         const cleaned: MenuItemOptions[] = []
         for (const it of items) {
