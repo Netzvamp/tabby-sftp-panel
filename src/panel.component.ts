@@ -29,6 +29,9 @@ const CANCELLED = Symbol('sftp-cancelled')
 interface SSHSessionLike {
     openSFTP(): Promise<SFTPSession>
     willDestroy$?: { subscribe(fn: () => void): { unsubscribe(): void } }
+    // Public on tabby-ssh's SSHSession (`constructor(injector, public profile: SSHProfile)`)
+    // but not in its exported typings — declared here for the local-edit host identity.
+    profile?: { options: { host: string, port: number, user: string } }
 }
 // The terminal-side SSHShellSession (tab.session): its `shell` is set once the
 // shell channel is open (session/shell.d.ts). Distinct from the connection
@@ -474,6 +477,7 @@ export class SftpPanelComponent implements OnDestroy {
     // the dead SFTP handle so openIfReady reopens against the new connection.
     async setSession (session: SSHSessionLike): Promise<void> {
         const swapped = this.session && session !== this.session
+        if (swapped && this.sftp) { this.localEdit.unregisterSession(this.sftp) }
         this.session = session
         if (swapped) { this.sftp = null as any; this.opening = false }
         // Best-effort: if the connection is torn down, flip back to "Connecting…"
@@ -512,6 +516,7 @@ export class SftpPanelComponent implements OnDestroy {
             // chatty server still loses it, or drop once a real signal exists.
             await new Promise(r => setTimeout(r, 400))
             this.sftp = await this.session.openSFTP()
+            this.localEdit.registerSession(this.sftp, this.session.profile)
             // First open (path still ''): go to the configured start folder ('~' →
             // remote home via a one-shot `pwd` exec, since russh has no realpath).
             // Reconnect (path already set): restore that folder, don't re-resolve.
@@ -569,6 +574,7 @@ export class SftpPanelComponent implements OnDestroy {
     }
 
     ngOnDestroy (): void {
+        if (this.sftp) { this.localEdit.unregisterSession(this.sftp) }
         this.configSub?.unsubscribe()
         this.transferSub?.unsubscribe()
         this.sessionSub?.unsubscribe()

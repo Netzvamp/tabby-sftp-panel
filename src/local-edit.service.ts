@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core'
 import { ConfigService, PlatformService, TranslateService } from 'tabby-core'
 import { Subject, debounceTime, debounce } from 'rxjs'
-import { parseFtypeExe, describeSftpError } from './sftp-util'
+import { parseFtypeExe, describeSftpError, hostKey, editKey, SessionRegistry } from './sftp-util'
 import { LogService } from './log.service'
 
 const req = (window as any).require
@@ -9,21 +9,33 @@ const fs = req('fs'), os = req('os'), nodePath = req('path')
 
 export type Opener = (tempPath: string) => void | Promise<void>
 
-// One file checked out for local editing.
+// One file checked out for local editing. Keyed by editKey(hostKey, remotePath), so the
+// same file on the same server is ONE temp copy no matter how often or from how many tabs
+// it gets opened.
 interface OpenEdit {
+  key: string
+  hostKey: string
   remotePath: string
   name: string
+  tempDir: string
+  tempPath: string
+  mode: number    // remote mode, re-applied after every upload
   mtime: number   // remote mtime (ms) as of the last transfer WE made — the baseline a
                   // conflict is measured against. 0 = unknown, which disables the check.
+  watcher: any | null
 }
 
 @Injectable({ providedIn: 'root' })
 export class LocalEditService {
-  // Files currently checked out for editing, keyed by their temp dir. The temp dirs are wiped
-  // when Tabby's window unloads, so quitting leaves no downloaded copies behind — and an
-  // editor still holding one gets the "file no longer exists" prompt instead of silently
-  // saving into the void.
+  // Files currently checked out for editing. The temp dirs are wiped when Tabby's window
+  // unloads, so quitting leaves no downloaded copies behind — and an editor still holding
+  // one gets the "file no longer exists" prompt instead of silently saving into the void.
   private openEdits = new Map<string, OpenEdit>()
+  // Live SFTP handles per server. A save picks one from here, so closing the tab that
+  // opened a file does not orphan it while another tab to the same server is still up.
+  private sessions = new SessionRegistry()
+  private hostKeys = new WeakMap<any, string>()
+  private fallbackSeq = 0
 
   constructor (
     private config: ConfigService,
@@ -34,13 +46,43 @@ export class LocalEditService {
     // beforeunload fires on quit and on reload alike, and rmSync is synchronous, so the
     // deletes complete before the window goes away. A hard kill still leaks — OS temp sweep.
     window.addEventListener('beforeunload', () => {
-      for (const dir of [...this.openEdits.keys()]) { this.rmTemp(dir) }
+      for (const edit of [...this.openEdits.values()]) { this.rmTemp(edit) }
     })
   }
 
-  private rmTemp (dir: string): void {
-    this.openEdits.delete(dir)
-    try { fs.rmSync(dir, { recursive: true, force: true }) } catch { /* ignore */ }
+  private rmTemp (edit: OpenEdit): void {
+    edit.watcher?.close()
+    edit.watcher = null
+    this.openEdits.delete(edit.key)
+    try { fs.rmSync(edit.tempDir, { recursive: true, force: true }) } catch { /* ignore */ }
+  }
+
+  // Called by the panel once its SFTP handle is up. `profile` is the SSHSession's profile
+  // (public in tabby-ssh, absent from our structural typing) — without it we fall back to a
+  // per-handle id, which degrades dedup to per-session rather than merging unrelated servers.
+  registerSession (sftp: any, profile: any): void {
+    if (this.hostKeys.has(sftp)) { return }
+    const key = hostKey(profile) || `session-${++this.fallbackSeq}`
+    this.hostKeys.set(sftp, key)
+    this.sessions.add(key, sftp)
+    sftp.closed$?.subscribe(() => this.unregisterSession(sftp))
+  }
+
+  // Last handle for a server gone → nothing can upload there any more, so stop watching and
+  // drop that server's temp copies. Other tabs to the same server keep the edits alive.
+  unregisterSession (sftp: any): void {
+    const key = this.hostKeys.get(sftp)
+    if (!key) { return }
+    this.hostKeys.delete(sftp)
+    if (!this.sessions.remove(key, sftp)) { return }
+    for (const edit of [...this.openEdits.values()]) {
+      if (edit.hostKey === key) { this.rmTemp(edit) }
+    }
+  }
+
+  private keyFor (sftp: any): string {
+    if (!this.hostKeys.has(sftp)) { this.registerSession(sftp, null) }
+    return this.hostKeys.get(sftp)!
   }
 
   // Current metadata for one remote file, or null when it cannot be read.
@@ -122,52 +164,70 @@ export class LocalEditService {
   // Download item to a temp file, run `opener` on it, then watch for saves and re-upload.
   // Mirrors Tabby's built-in EditSFTPContextMenu.edit(), parametrized by `opener`.
   async edit (sftp: any, item: any, mode: number, size: number, opener: Opener): Promise<void> {
+    const host = this.keyFor(sftp)
+    const key = editKey(host, item.fullPath)
+
     const tempDir = fs.mkdtempSync(nodePath.join(os.tmpdir(), 'sftp-panel-'))  // stdlib mkdtemp, no tmp-promise dep
     const tempPath = nodePath.join(tempDir, item.name)
-    const cleanup = () => this.rmTemp(tempDir)
 
     // The panel's listing can be minutes old. Re-read the metadata so the transfer's declared
     // size is the real one — FileTransfer.isComplete() is `completedBytes >= getSize()`, so a
     // stale size makes the download report complete early or never complete at all. The same
-    // read supplies the mtime baseline the conflict check below measures against.
+    // read supplies the mtime baseline the conflict check measures against.
     const start = await this.freshMeta(sftp, item.fullPath)
     if (start) { mode = start.mode; size = start.size }
-    const edit: OpenEdit = { remotePath: item.fullPath, name: item.name, mtime: +(start?.modified ?? 0) }
-    this.openEdits.set(tempDir, edit)
+    const edit: OpenEdit = {
+      key, hostKey: host, remotePath: item.fullPath, name: item.name,
+      tempDir, tempPath, mode, mtime: +(start?.modified ?? 0), watcher: null,
+    }
+    this.openEdits.set(key, edit)
 
     try {
       const transfer = await (this.platform as any).startDownload(item.name, mode, size, tempPath)
-      if (!transfer) { cleanup(); return }
+      if (!transfer) { this.rmTemp(edit); return }
       await sftp.download(item.fullPath, transfer)
       await opener(tempPath)
     } catch (e) {
-      cleanup()
+      this.rmTemp(edit)
       throw e
     }
 
-    const events = new Subject<string>()
     fs.chmodSync(tempPath, 0o700)
     // Skip the download's own write burst before watching.
-    setTimeout(() => {
-      const watcher = fs.watch(tempPath, (ev: string) => events.next(ev))
-      events.pipe(debounceTime(1000), debounce(async (ev: string) => {
-        try {
-          if (ev === 'rename') { watcher.close() }
-          if (!await this.confirmNoConflict(sftp, edit)) { return }
-          const upload = await (this.platform as any).startUpload({ multiple: false }, [tempPath])
-          if (!upload.length) { return }
-          await sftp.upload(item.fullPath, upload[0])
-          await sftp.chmod(item.fullPath, mode)
-          // Our own write moved the remote mtime — rebase the baseline on it, or the very
-          // next save would report a conflict against ourselves.
-          edit.mtime = +((await this.freshMeta(sftp, item.fullPath))?.modified ?? 0)
-        } catch (e: any) {
-          this.reportUploadFailure(item.name, tempPath, e)
-        }
-      })).subscribe()
-      watcher.on('close', () => events.complete())
-      sftp.closed$.subscribe(() => { watcher.close(); cleanup() })
-    }, 1000)
+    setTimeout(() => this.startWatching(edit), 1000)
+  }
+
+  // Watch the temp file and re-upload on save. Split out of edit() because a reload
+  // (Task 3) has to tear the watcher down and build a fresh one on the same path.
+  private startWatching (edit: OpenEdit): void {
+    if (!this.openEdits.has(edit.key)) { return }   // cleaned up while we waited
+    const events = new Subject<string>()
+    const watcher = fs.watch(edit.tempPath, (ev: string) => events.next(ev))
+    edit.watcher = watcher
+    events.pipe(debounceTime(1000), debounce(async (ev: string) => {
+      if (ev === 'rename') { watcher.close() }
+      await this.save(edit)
+    })).subscribe()
+    watcher.on('close', () => events.complete())
+  }
+
+  // Push the temp file back to the server. The handle is resolved HERE, not captured when
+  // the watcher was created, so the save still works after the opening tab is closed.
+  private async save (edit: OpenEdit): Promise<void> {
+    try {
+      const sftp = this.sessions.any(edit.hostKey)
+      if (!sftp) { throw new Error(this.translate.instant('No open connection to {host}', { host: edit.hostKey })) }
+      if (!await this.confirmNoConflict(sftp, edit)) { return }
+      const upload = await (this.platform as any).startUpload({ multiple: false }, [edit.tempPath])
+      if (!upload.length) { return }
+      await sftp.upload(edit.remotePath, upload[0])
+      await sftp.chmod(edit.remotePath, edit.mode)
+      // Our own write moved the remote mtime — rebase the baseline on it, or the very
+      // next save would report a conflict against ourselves.
+      edit.mtime = +((await this.freshMeta(sftp, edit.remotePath))?.modified ?? 0)
+    } catch (e: any) {
+      this.reportUploadFailure(edit.name, edit.tempPath, e)
+    }
   }
 
   // Someone else touched the file on the server since we last transferred it? Ask before
