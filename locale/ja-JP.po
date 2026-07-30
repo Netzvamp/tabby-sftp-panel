@@ -374,3 +374,16 @@ msgstr "ローカルファイルシステムを使ったファイルブラウザ
 
 msgid "{target} already exists."
 msgstr "{target} は既に存在します。"
+
+# --- WSL tabs ---
+msgid "Browse the WSL filesystem on WSL tabs"
+msgstr "WSL タブで WSL のファイルシステムを表示"
+
+msgid "On a WSL tab the panel shows that distribution files instead of the Windows drives. Delete is permanent there, because a WSL share has no recycle bin."
+msgstr "WSL タブでは、パネルは Windows のドライブではなく、そのディストリビューションのファイルを表示します。WSL 共有にはごみ箱がないため、そこでの削除は元に戻せません。"
+
+msgid "Delete {n} item(s) permanently? A WSL share has no recycle bin."
+msgstr "{n} 個の項目を完全に削除しますか？ WSL 共有にはごみ箱がありません。"
+
+msgid "{target} already exists. Overwriting deletes it permanently."
+msgstr "{target} は既に存在します。上書きすると完全に削除されます。"

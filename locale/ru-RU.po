@@ -374,3 +374,16 @@ msgstr "Добавляет файловый браузер в локальные
 
 msgid "{target} already exists."
 msgstr "{target} уже существует."
+
+# --- WSL tabs ---
+msgid "Browse the WSL filesystem on WSL tabs"
+msgstr "Просматривать файловую систему WSL на вкладках WSL"
+
+msgid "On a WSL tab the panel shows that distribution files instead of the Windows drives. Delete is permanent there, because a WSL share has no recycle bin."
+msgstr "На вкладке WSL панель показывает файлы этого дистрибутива вместо дисков Windows. Удаление там происходит безвозвратно, так как общий ресурс WSL не имеет корзины."
+
+msgid "Delete {n} item(s) permanently? A WSL share has no recycle bin."
+msgstr "Удалить {n} элемент(ов) безвозвратно? Общий ресурс WSL не имеет корзины."
+
+msgid "{target} already exists. Overwriting deletes it permanently."
+msgstr "{target} уже существует. Перезапись удалит его безвозвратно."

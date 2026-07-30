@@ -30,7 +30,8 @@ src/
   config.ts           sftpPanel defaults — side, pinned, width, startDirectory, showHidden,
                       fileClickAction, editorEnabled/editorPath/editorMaxSizeMB, sort, columns,
                       columnOrder, transfersVisible/transfersHeight/transfersAutoShow, localTabs
-                      (also mount the panel on local terminal tabs; on by default)
+                      (also mount the panel on local terminal tabs; on by default), wslTabs (on a
+                      WSL tab, browse that distro filesystem instead; on by default)
   panel.component.ts  SftpPanelComponent — the panel UI (inline template+styles). The big one.
   mount.service.ts    PanelMountService — dynamic createComponent() into each SSH pane's DOM,
                       and each local terminal pane's (`tab.profile?.type === 'local'`, gated on
@@ -53,7 +54,7 @@ src/
                       .localeChanged$. Only ships strings Tabby lacks; shared labels reuse Tabby's.
 ../locale/*.po      our gettext catalogs — at the REPO ROOT, not under src/ (de-DE, zh-CN,
                       ru-RU, es-ES, fr-FR, ja-JP, pt-BR).
-                      gap strings only, 120 msgid each, identical key sets. built via json-loader +
+                      gap strings only, 124 msgid each, identical key sets. built via json-loader +
                       po-gettext-loader (webpack .po rule) — same chain Tabby uses. i18n.service
                       picks up new langs automatically (dynamic require → webpack context).
   settings.ts         settings tab for sftpPanel
@@ -63,6 +64,11 @@ src/
                       drive-root enumeration + `isDriveRoot`, and `toNativeFsPath` — the guarded
                       conversion EVERY fs call must use; pure, `window`-free so `node:test`
                       can import it
+  wsl.ts              WSL detection + distro lookup: profile command/args -> distro (or '' for the
+                      default), one cached `reg.exe query …\Lxss /s` for the default distro name
+                      and each DefaultUid, `\\wsl$\<distro>` as the base, and `wslHome` resolving
+                      the distro home from its own /etc/passwd. Parsers are pure; reg.exe messages
+                      are localized but its data lines are not, so parsing goes by structure
   local-fs.session.ts `LocalFsSession`, duck-types `SFTPSession` over node `fs` so the panel
                       browses a local tab with no call-site changes; streams `upload`/`download`
                       through the same transfer interface
@@ -81,8 +87,8 @@ src/
                       (shQuote/buildCpCommand/expandDirs), local-tab column/sort gating
                       (filterLocalCols/effectiveSortColumn)
   logic.ts            dock math (clampSize/dockSize) — clampSize reused for transfer-list height
-  *.test.ts           node:test units for sftp-util (32) + logic (4) + i18n (2) + local-path (10)
-                      + local-fs.session (9) + local-ops (26) = 83
+  *.test.ts           node:test units for sftp-util (32) + logic (4) + i18n (2) + local-path (13)
+                      + local-fs.session (13) + local-ops (32) + wsl (9) = 105
                       i18n.test.ts guards the catalogs: identical msgid sets, no empty msgstr
 docs/superpowers/      specs + plans (design of record)
 _tabby-ref/            full Tabby source, READ-ONLY reference. NOT ours. Ignore in globs.
@@ -98,8 +104,8 @@ loads the built file, not the source.
 ```
 npm run build      # webpack → dist/index.js
 npm run watch      # rebuild on change
-npm test           # tsx --test src/*.test.ts — 83 units (sftp-util 32 + logic 4 + i18n 2 +
-                    # local-path 10 + local-fs.session 9 + local-ops 26)
+npm test           # tsx --test src/*.test.ts — 105 units (sftp-util 32 + logic 4 + i18n 2 +
+                    # local-path 13 + local-fs.session 13 + local-ops 32 + wsl 9)
 npx tsc --noEmit -p tsconfig.json   # REQUIRED type-check — build does NOT type-check
 ```
 
@@ -341,6 +347,26 @@ publishing now needs a passkey/WebAuthn; that's the fallback if CI is ever broke
   do not "fix" it by guarding on `ino !== 0`, which buys the false-negative direction instead.
   Also note `endpoints()` runs up to two ancestor walks and the panel calls it up to three times
   per item; under a dead network mount each of those stats blocks until the OS times out.
+- **WSL tabs are local tabs, and their filesystem is a network share.** `profile.type` is
+  `local` and the command is `wsl.exe`; `Shell.fsBase` exists in tabby-local's API but
+  `optionsFromShell` never copies it into the profile and the default-distro shell never sets
+  it, so the distro comes from the `-d` argument or from the Lxss registry key. The share is
+  `\\wsl$\<distro>` for WSL1 and WSL2 alike. With a base set, `LocalFsSession` and `local-ops`
+  speak the distribution's own posix paths and `displayPath` is the identity — the `\\wsl$`
+  form is shown to nobody, only handed to `fs` and to an external editor. **Everything the 9p
+  redirector gets wrong is load-bearing:** `stat().mode` is always `100666`/`40666` and `chmod`
+  silently does nothing (harmless — perms and chmod are already hidden on win32); `lstat`,
+  `stat`, `readlink` AND `readdir` all throw `ENOENT`/`EISDIR` on a symlink while
+  `readdir({withFileTypes:true})` flags it correctly, which is why `entry()` synthesises a
+  metadata-less row from the dirent instead of dropping it, and why symlinks can be seen but
+  never opened; `stat().dev` is always `0`, so dev+ino identity holds only within one
+  filesystem — `/mnt/c/…` and `/home/…` share `dev = 0` and a colliding inode there refuses a
+  copy that would have been fine (loud, no data loss, same trade as `ino === 0`); and `\\wsl$`
+  itself is not enumerable, so there is no way to discover distros from the filesystem. There
+  is also **no recycle bin**: Delete and Overwrite are permanent on a WSL tab, which is why
+  both prompts say so and why `localTrash`/`clearDestination` branch on the base rather than
+  calling `shell.trashItem`. That coupling is deliberate — base implies WSL implies no bin;
+  a second base kind with a bin would need its own flag.
 
 ## Status
 
@@ -367,6 +393,8 @@ Shipping. Published on npm (`tabby-sftp-panel`), listed in Tabby's plugin manage
   in issue #5: no polling (detection happens on save and on re-open), and no "keep both" conflict
   option.
 - The panel also runs on local terminal tabs as a plain file explorer (`localTabs`, on by
-  default), backed by the local filesystem; upload/download affordances and the owner/group
-  columns are hidden there, chmod is posix-only, delete goes to the recycle bin, and "edit
-  locally" becomes a direct editor spawn with no temp copy.
+  default), backed by the local filesystem; on a WSL tab it browses that distribution instead
+  (`wslTabs`, on by default, setting shown only on win32). Upload/download affordances and the
+  owner/group columns are hidden there, chmod is posix-only, delete goes to the recycle bin —
+  except on WSL, where there is none and it is permanent — and "edit locally" becomes a direct
+  editor spawn with no temp copy.

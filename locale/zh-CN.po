@@ -374,3 +374,16 @@ msgstr "将文件浏览器添加到本地 shell，基于本地文件系统。"
 
 msgid "{target} already exists."
 msgstr "{target} 已存在。"
+
+# --- WSL tabs ---
+msgid "Browse the WSL filesystem on WSL tabs"
+msgstr "在 WSL 标签页中浏览 WSL 文件系统"
+
+msgid "On a WSL tab the panel shows that distribution files instead of the Windows drives. Delete is permanent there, because a WSL share has no recycle bin."
+msgstr "在 WSL 标签页中，面板显示该发行版的文件，而不是 Windows 驱动器。删除在那里是永久的，因为 WSL 共享没有回收站。"
+
+msgid "Delete {n} item(s) permanently? A WSL share has no recycle bin."
+msgstr "永久删除 {n} 个项目？WSL 共享没有回收站。"
+
+msgid "{target} already exists. Overwriting deletes it permanently."
+msgstr "{target} 已存在。覆盖会永久删除它。"

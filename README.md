@@ -37,7 +37,10 @@ SFTP panel rather than replacing it.
   local filesystem starting in the shell's working directory. Upload/download buttons
   stay hidden (source and destination are the same machine), copy/move runs over the
   filesystem instead of the server, and deletes go to the recycle bin; turn it off with
-  the "Show the panel on local terminal tabs" setting.
+  the "Show the panel on local terminal tabs" setting. On a WSL tab (Windows only) the
+  panel browses that distribution filesystem instead of the Windows drives; there
+  deletes and overwrites are permanent, since a WSL share has no recycle bin — turn it
+  off with the "Browse the WSL filesystem on WSL tabs" setting.
 - **i18n** — ships German plus 6 additional languages (zh-CN, ru-RU, es-ES,
   fr-FR, ja-JP, pt-BR), merged on top of Tabby's own catalog.
 
@@ -91,6 +94,7 @@ All settings live under Tabby → Settings → **SFTP Panel** (config key `sftpP
 | `editorMaxSizeMB` | `1` | Warn before opening a file larger than this; `0` = never. |
 | `transfersAutoShow` | `true` | Auto-open the transfer list on an upload/download. |
 | `localTabs` | `true` | Also mount the panel on local terminal tabs. |
+| `wslTabs` | `true` | On a WSL tab, browse that distribution filesystem instead of the Windows drives. Windows only. Delete and overwrite are permanent there — a WSL share has no recycle bin. |
 
 Columns, sort order, column order/widths, and transfer-list height are all
 adjustable in the UI and persisted automatically.

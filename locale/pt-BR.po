@@ -374,3 +374,16 @@ msgstr "Adiciona o navegador de arquivos às shells locais, usando o sistema de 
 
 msgid "{target} already exists."
 msgstr "{target} já existe."
+
+# --- WSL tabs ---
+msgid "Browse the WSL filesystem on WSL tabs"
+msgstr "Navegar pelo sistema de arquivos do WSL nas abas WSL"
+
+msgid "On a WSL tab the panel shows that distribution files instead of the Windows drives. Delete is permanent there, because a WSL share has no recycle bin."
+msgstr "Em uma aba WSL, o painel mostra os arquivos dessa distribuição em vez das unidades do Windows. A exclusão lá é permanente, porque um compartilhamento WSL não tem lixeira."
+
+msgid "Delete {n} item(s) permanently? A WSL share has no recycle bin."
+msgstr "Excluir {n} item(ns) permanentemente? Um compartilhamento WSL não tem lixeira."
+
+msgid "{target} already exists. Overwriting deletes it permanently."
+msgstr "{target} já existe. Substituí-lo o exclui permanentemente."

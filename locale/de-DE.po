@@ -374,3 +374,16 @@ msgstr "Fügt den Dateibrowser lokalen Shells hinzu, gestützt auf das lokale Da
 
 msgid "{target} already exists."
 msgstr "{target} existiert bereits."
+
+# --- WSL tabs ---
+msgid "Browse the WSL filesystem on WSL tabs"
+msgstr "Auf WSL-Tabs das WSL-Dateisystem anzeigen"
+
+msgid "On a WSL tab the panel shows that distribution files instead of the Windows drives. Delete is permanent there, because a WSL share has no recycle bin."
+msgstr "Auf einem WSL-Tab zeigt das Panel die Dateien dieser Distribution statt der Windows-Laufwerke. Löschen ist dort endgültig, weil eine WSL-Freigabe keinen Papierkorb hat."
+
+msgid "Delete {n} item(s) permanently? A WSL share has no recycle bin."
+msgstr "{n} Element(e) endgültig löschen? Eine WSL-Freigabe hat keinen Papierkorb."
+
+msgid "{target} already exists. Overwriting deletes it permanently."
+msgstr "{target} existiert bereits. Überschreiben löscht es endgültig."
