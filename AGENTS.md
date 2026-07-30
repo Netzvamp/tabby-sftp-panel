@@ -351,9 +351,18 @@ publishing now needs a passkey/WebAuthn; that's the fallback if CI is ever broke
   `local` and the command is `wsl.exe`; `Shell.fsBase` exists in tabby-local's API but
   `optionsFromShell` never copies it into the profile and the default-distro shell never sets
   it, so the distro comes from the `-d` argument or from the Lxss registry key. The share is
-  `\\wsl$\<distro>` for WSL1 and WSL2 alike. With a base set, `LocalFsSession` and `local-ops`
-  speak the distribution's own posix paths and `displayPath` is the identity — the `\\wsl$`
-  form is shown to nobody, only handed to `fs` and to an external editor. **Everything the 9p
+  `\\wsl$\<distro>` for WSL1 and WSL2 alike. **`wslDistroOf` matches `wsl.exe` by basename but
+  `bash.exe` only under `%windir%\System32` (or `Sysnative`)** — Tabby ships three other
+  built-in local shells whose command basename is `bash.exe` (`gitBash.ts`, `cygwin64.ts`,
+  `cygwin32.ts`), and matching those handed a Git Bash tab the default distro's share, wrong
+  filesystem and permanent deletes included. Only the System32 one is legacy "Bash on Windows".
+  The base is also part of a session's **flavour**: `setSession` resets `this.path` when the
+  base changes, not just when `local` does, because two local panes in one split can be two
+  different distributions where the same path exists on both. With a base set, `LocalFsSession`
+  and `local-ops` speak the distribution's own posix paths and `displayPath` is the identity —
+  the `\\wsl$` form is never *deliberately* shown, only handed to `fs` and to an external
+  editor, though it can still surface inside a raw fs error message (`local-ops` returns node's
+  errno text verbatim and the panel logs it on a copy/move/delete failure). **Everything the 9p
   redirector gets wrong is load-bearing:** `stat().mode` is always `100666`/`40666` and `chmod`
   silently does nothing (harmless — perms and chmod are already hidden on win32); `lstat`,
   `stat`, `readlink` AND `readdir` all throw `ENOENT`/`EISDIR` on a symlink while
@@ -366,7 +375,11 @@ publishing now needs a passkey/WebAuthn; that's the fallback if CI is ever broke
   is also **no recycle bin**: Delete and Overwrite are permanent on a WSL tab, which is why
   both prompts say so and why `localTrash`/`clearDestination` branch on the base rather than
   calling `shell.trashItem`. That coupling is deliberate — base implies WSL implies no bin;
-  a second base kind with a bin would need its own flag.
+  a second base kind with a bin would need its own flag. **Neither `fs.rm` branch passes
+  `force`**: `fs.rm` starts with an `lstat`, 9p throws on `lstat` of a symlink, and `force`
+  would turn "could not remove it" into a reported success — a confirmed permanent delete that
+  deleted nothing. In `clearDestination` a `stat` has already proven the entry exists, so
+  dropping `force` there cannot invent a failure and makes a silent no-op impossible.
 
 ## Status
 
