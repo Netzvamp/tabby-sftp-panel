@@ -36,7 +36,8 @@ async function lstatOf (p: string): Promise<any | null> {
  *  `lstat`). A dangling symlink at the destination is safe only because all three fail on it
  *  identically: it is reported as "no collision", so no prompt, no removal, and fs.cp/fs.rename
  *  deal with it. Switch one of them to `lstat` and that agreement breaks silently — the prompt
- *  would fire for an entry `sameEntry` cannot see.
+ *  would fire for an entry `sameEntry` cannot see. `nests()`'s ancestor walk is `stat`-bound for a
+ *  second reason: following links is what makes it catch a destination reached through a junction.
  *  The SOURCE-side bail in `endpoints` is the deliberate exception (`stat ?? lstat`): a dangling
  *  link is a real, copyable item, and treating it as "no longer exists" blocked a valid
  *  operation. It is one-sided on purpose — it never decides whether to remove anything. */
@@ -114,9 +115,10 @@ async function endpoints (src: string, destDir: string): Promise<{ from: string,
     // which fs.cp at least refuses on its own (ERR_FS_CP_EINVAL). `from` inside `to` is the mirror
     // — flattening `…/src/src` into `…/`, where `to` is `…/src`, an ANCESTOR of the source — and
     // there raw fs.cp SUCCEEDS, so nothing downstream would ever catch it: the destination we were
-    // about to bin contains the source. Note the shape this must NOT refuse: moving a folder up
-    // one level. Its destination is the source's own parent, so `to` === `from` and it is caught
-    // upstream as SAME_ENTRY; moving up two levels puts `to` beside the source, nested neither way.
+    // about to bin contains the source. The shape this must NOT refuse is the ordinary move up one
+    // level — into the parent of the directory the item sits in, where `to` lands beside that
+    // directory, nested neither way. (Into the directory it ALREADY sits in, `to` === `from`: a
+    // no-op, refused upstream as SAME_ENTRY.)
     if (await nests(from, srcStat, to) || await nests(to, dstStat, from)) { return OVERLAP }
     return { from, to }
 }

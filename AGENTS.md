@@ -295,8 +295,10 @@ publishing now needs a passkey/WebAuthn; that's the fallback if CI is ever broke
   raw `fs.cp` SUCCEEDS so there is no backstop but ours). Each direction runs a `nodePath.relative`
   pass (`win32.relative` folds case, `posix.relative` does not) plus a dev+ino walk of the inner
   path's existing ancestors (the pass that survives macOS's case-insensitive default volume and a
-  symlinked destination). Moving a folder UP one level must keep working — it lands on
-  `to === from` and is caught as same-entry, not as nesting. Everything that can refuse runs BEFORE the collision
+  symlinked destination). The ordinary move UP one level — into the parent of the directory the item
+  sits in — must keep working: `to` lands beside that directory, nested neither way. (Into the
+  directory it already sits in, `to === from`: a no-op, refused as same-entry.)
+  Everything that can refuse runs BEFORE the collision
   prompt, via the exported `localRefusal()`, so a doomed operation is never dressed up as an
   overwrite to confirm, and before the removal, so it never bins for an operation that cannot run;
   (3) a copy/rename that fails after the removal (EBUSY/EACCES on a locked file is routine on
