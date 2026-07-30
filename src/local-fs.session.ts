@@ -13,24 +13,33 @@ const CHUNK = 256 * 1024   // same read size russh's SFTPFileHandle uses
 // implementing them here leaves every call site in panel.component.ts unchanged.
 // All paths in and out are VIRTUAL posix paths (see local-path.ts).
 export class LocalFsSession {
+    /** `base` roots the whole session at a native prefix — a WSL distro share
+     *  (`\\wsl$\Ubuntu`). With one set, the virtual paths this session speaks ARE the
+     *  distribution's own posix paths: `/` is a real directory rather than the synthetic
+     *  drive-list root, and there are no drives to enumerate. Empty = an ordinary local tab. */
+    constructor (private base = '') {}
+
+    private native (p: string): string {
+        return toNativeFsPath(p, this.base)
+    }
+
     async readdir (p: string): Promise<SFTPFile[]> {
-        if (isVirtualRoot(p)) { return this.drives() }
-        const native = toNativeFsPath(p)
-        const names: string[] = await fsp.readdir(native)
-        const out = await Promise.all(names.map(n => this.entry(p, n)))
+        if (!this.base && isVirtualRoot(p)) { return this.drives() }
+        const ents: any[] = await fsp.readdir(this.native(p), { withFileTypes: true })
+        const out = await Promise.all(ents.map(e => this.entry(p, e)))
         // Entries can vanish between readdir and lstat — drop them rather than fail the listing.
         return out.filter(Boolean) as SFTPFile[]
     }
 
     async stat (p: string): Promise<SFTPFile> {
-        const native = toNativeFsPath(p)
+        const native = this.native(p)
         const st = await fsp.stat(native)          // follows symlinks, like SFTP stat
         const lst = await fsp.lstat(native).catch(() => st)
         return this.toFile(p, st, lst.isSymbolicLink())
     }
 
     async readlink (p: string): Promise<string> {
-        const target: string = await fsp.readlink(toNativeFsPath(p))
+        const target: string = await fsp.readlink(this.native(p))
         // Absolute targets become virtual; relative ones stay relative — the panel feeds the
         // result to posix.resolve(this.path, target), which needs that distinction intact.
         const rel = isWin ? !/^([A-Za-z]:|\\\\)/.test(target) : !target.startsWith('/')
@@ -42,7 +51,7 @@ export class LocalFsSession {
     // write — an existing file surfaces as EEXIST in the panel log instead of being
     // truncated, which is the safer direction for a "New file" action.
     async open (p: string, _mode: number): Promise<{ read(): Promise<Uint8Array>, write(c: Uint8Array): Promise<void>, close(): Promise<void> }> {
-        const h = await fsp.open(toNativeFsPath(p), 'wx')
+        const h = await fsp.open(this.native(p), 'wx')
         return {
             async read () { return new Uint8Array(0) },
             async write (c: Uint8Array) { await h.write(c) },
@@ -50,18 +59,18 @@ export class LocalFsSession {
         }
     }
 
-    async mkdir (p: string): Promise<void> { await fsp.mkdir(toNativeFsPath(p)) }
-    async rmdir (p: string): Promise<void> { await fsp.rmdir(toNativeFsPath(p)) }
-    async unlink (p: string): Promise<void> { await fsp.unlink(toNativeFsPath(p)) }
-    async rename (from: string, to: string): Promise<void> { await fsp.rename(toNativeFsPath(from), toNativeFsPath(to)) }
-    async chmod (p: string, mode: string | number): Promise<void> { await fsp.chmod(toNativeFsPath(p), mode) }
+    async mkdir (p: string): Promise<void> { await fsp.mkdir(this.native(p)) }
+    async rmdir (p: string): Promise<void> { await fsp.rmdir(this.native(p)) }
+    async unlink (p: string): Promise<void> { await fsp.unlink(this.native(p)) }
+    async rename (from: string, to: string): Promise<void> { await fsp.rename(this.native(from), this.native(to)) }
+    async chmod (p: string, mode: string | number): Promise<void> { await fsp.chmod(this.native(p), mode) }
 
     // Streaming through the same FileUpload/FileDownload interface is what keeps drag-in,
     // drag-out, the transfer log rows, the progress bars and the per-row Stop button working
     // with no panel changes at all.
     async download (p: string, transfer: FileDownload): Promise<void> {
         try {
-            const h = await fsp.open(toNativeFsPath(p), 'r')
+            const h = await fsp.open(this.native(p), 'r')
             try {
                 const buf = Buffer.allocUnsafe(CHUNK)
                 while (true) {
@@ -81,7 +90,7 @@ export class LocalFsSession {
     // Mirrors SFTPSession.upload: write to a sibling temp file, then swap it in, so a
     // cancelled or failed transfer never leaves a truncated destination.
     async upload (p: string, transfer: FileUpload): Promise<void> {
-        const native = toNativeFsPath(p)
+        const native = this.native(p)
         const temp = native + '.tabby-upload'
         try {
             const h = await fsp.open(temp, 'w')
@@ -102,15 +111,30 @@ export class LocalFsSession {
         }
     }
 
-    private async entry (dir: string, name: string): Promise<SFTPFile | null> {
-        const full = dir.replace(/\/+$/, '') + '/' + name
+    private async entry (dir: string, ent: any): Promise<SFTPFile | null> {
+        const full = dir.replace(/\/+$/, '') + '/' + ent.name
         try {
             // lstat, not stat: SFTP readdir does not follow symlinks either, and following
             // them here would hang on a link into a dead network mount.
-            const st = await fsp.lstat(toNativeFsPath(full))
+            const st = await fsp.lstat(this.native(full))
             return this.toFile(full, st, st.isSymbolicLink())
         } catch {
-            return null
+            // WSL's 9p redirector fails EVERY symlink call — lstat, stat, readlink and
+            // readdir all throw ENOENT or EISDIR on one — while readdir's dirent flags stay
+            // correct. Synthesise the row from the flag rather than hide /bin, /lib and /sbin
+            // from the listing. Restricted to symlinks on purpose: any other lstat failure
+            // still means the entry vanished between the two calls, and inventing a row for
+            // that would be a ghost.
+            if (!ent.isSymbolicLink?.()) { return null }
+            return {
+                name: ent.name,
+                fullPath: full,
+                isDirectory: false,
+                isSymlink: true,
+                mode: 0o120777,   // symlink type bits, so the icon and mode string are right
+                size: 0,
+                modified: new Date(0),
+            }
         }
     }
 

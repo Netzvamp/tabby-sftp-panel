@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, writeFileSync, readFileSync, rmSync, symlinkSync } from 'node:fs'
+import { mkdtempSync, writeFileSync, readFileSync, mkdirSync, existsSync, rmSync, symlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createRequire } from 'node:module'
@@ -142,5 +142,77 @@ test('open rejects when the target already exists', async () => {
         writeFileSync(join(dir, 'exists.txt'), 'hi')
         const s = new LocalFsSession()
         await assert.rejects(() => s.open(vdir + '/exists.txt', 0))
+    })
+})
+
+test('a based session browses posix paths rooted at the base', async () => {
+    await withTempDir(async (dir) => {
+        mkdirSync(join(dir, 'home', 'bob'), { recursive: true })
+        writeFileSync(join(dir, 'home', 'bob', 'a.txt'), 'hello')
+        // The base stands in for '\\wsl$\Ubuntu'. Paths in and out are the distro's own.
+        const s = new LocalFsSession(dir)
+        const rootEntries = await s.readdir('/')
+        assert.deepEqual(rootEntries.map((e: any) => e.name), ['home'])
+        assert.equal(rootEntries[0].fullPath, '/home')
+        const st = await s.stat('/home/bob/a.txt')
+        assert.equal(st.size, 5)
+        await s.mkdir('/home/bob/sub')
+        assert.ok(existsSync(join(dir, 'home', 'bob', 'sub')))
+    })
+})
+
+test('a based session does not list drives at the root', async () => {
+    await withTempDir(async (dir) => {
+        // Without a base, '/' on win32 is the synthetic drive-list root. With one it is a real
+        // directory in the distribution, and returning drives there would be nonsense.
+        const s = new LocalFsSession(dir)
+        assert.deepEqual((await s.readdir('/')).map((e: any) => e.name), [])
+    })
+})
+
+test('readdir keeps a symlink row when lstat fails on it', async () => {
+    await withTempDir(async (dir, vdir) => {
+        writeFileSync(join(dir, 'real.txt'), 'x')
+        symlinkSync(join(dir, 'real.txt'), join(dir, 'link.txt'))
+        const s = new LocalFsSession()
+        // WSL's 9p redirector throws ENOENT/EISDIR on lstat of a symlink while readdir's
+        // dirent flags stay correct. Force that shape by making lstat fail for the link.
+        const fsp = (globalThis as any).window.require('fs').promises
+        const realLstat = fsp.lstat
+        fsp.lstat = async (p: string) => {
+            if (String(p).endsWith('link.txt')) { throw Object.assign(new Error('EISDIR'), { code: 'EISDIR' }) }
+            return realLstat(p)
+        }
+        try {
+            const entries = (await s.readdir(vdir)).sort((a: any, b: any) => a.name.localeCompare(b.name))
+            assert.deepEqual(entries.map((e: any) => e.name), ['link.txt', 'real.txt'])
+            const link = entries[0]
+            assert.equal(link.isSymlink, true, 'the dirent flag is the only reliable signal here')
+            assert.equal(link.fullPath, vdir + '/link.txt')
+            assert.ok((link.mode & 0o170000) === 0o120000, 'mode must carry the symlink type bits')
+        } finally {
+            fsp.lstat = realLstat
+        }
+    })
+})
+
+test('readdir still drops an entry that vanished between readdir and lstat', async () => {
+    await withTempDir(async (dir, vdir) => {
+        writeFileSync(join(dir, 'gone.txt'), 'x')
+        writeFileSync(join(dir, 'stays.txt'), 'x')
+        const s = new LocalFsSession()
+        const fsp = (globalThis as any).window.require('fs').promises
+        const realLstat = fsp.lstat
+        // A plain file whose lstat fails is genuinely gone — the symlink fallback must not
+        // turn it into a ghost row.
+        fsp.lstat = async (p: string) => {
+            if (String(p).endsWith('gone.txt')) { throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' }) }
+            return realLstat(p)
+        }
+        try {
+            assert.deepEqual((await s.readdir(vdir)).map((e: any) => e.name), ['stays.txt'])
+        } finally {
+            fsp.lstat = realLstat
+        }
     })
 })
