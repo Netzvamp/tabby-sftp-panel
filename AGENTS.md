@@ -324,6 +324,23 @@ publishing now needs a passkey/WebAuthn; that's the fallback if CI is ever broke
   field, copy/move log lines), and the dialog's answer is converted back with `toVirtualPath`
   (idempotent, so a typed virtual path still works). The drag-in collision prompt reuses the
   copy/move msgid `'{target} already exists.'` locally — `'…on the server.'` is remote-only.
+- **What the local destructive paths still cannot promise (accepted at v0.2.0, verified by
+  reading, not by test).** Three limits sit under everything above, and none of them is a bug to
+  go fix — they are the edges of what the platform gives us. (1) **The recycle bin is the OS's
+  promise, not ours.** On win32 `shell.trashItem` goes through `IFileOperation`, which may delete
+  PERMANENTLY on a network share or when the item exceeds the bin quota. That applies to Delete
+  and, since Overwrite routes through the same call, to Overwrite. Nothing in our code downgrades
+  it — the OS does. (2) **Two branches have no test.** The EXDEV leg (a cross-device move, needs
+  two volumes) and the non-ENOENT stat in `clearDestination` (needs a permission change *during*
+  the modal) are asserted by reading only. `shell.trashItem` is stubbed under `node:test`, so no
+  test exercises a real bin either — the stub rejects on a missing path so the TOCTOU case is at
+  least visible. Treat all three as unproven when changing that code. (3) **dev+ino assumes real
+  inodes.** On a volume that reports `ino === 0` for every entry (exFAT, FAT32, some network
+  shares) every existing destination compares identical and every overwrite is refused. That fails
+  loudly with no data loss, and matches what node's own `fs.cp` does, so it is the right trade —
+  do not "fix" it by guarding on `ino !== 0`, which buys the false-negative direction instead.
+  Also note `endpoints()` runs up to two ancestor walks and the panel calls it up to three times
+  per item; under a dead network mount each of those stats blocks until the OS times out.
 
 ## Status
 
