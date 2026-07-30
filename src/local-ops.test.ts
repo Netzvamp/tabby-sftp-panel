@@ -414,6 +414,17 @@ test('a based delete removes a whole tree', async () => {
     })
 })
 
+test('a based delete that removed nothing reports a failure instead of success', async () => {
+    await withTempDir(async (dir) => {
+        // fs.rm({force:true}) swallows the ENOENT its opening lstat throws and returns as if it
+        // had deleted something — and on a WSL share lstat throws ENOENT/EISDIR for every
+        // SYMLINK, of which a distro root is full. The user confirms a PERMANENT delete, the
+        // panel logs "Deleted bin", and the link is still there. A message is the only honest
+        // answer for anything this branch could not remove.
+        assert.ok(await localTrash('/home/nope.txt', dir), 'a removal that did not happen must not report success')
+    })
+})
+
 test('a based overwrite deletes the destination permanently and says so on failure', async () => {
     await withTempDir(async (dir) => {
         mkdirSync(join(dir, 'srv'))

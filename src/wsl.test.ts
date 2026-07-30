@@ -43,10 +43,18 @@ test('wslDistroOf recognises wsl.exe and reads the -d argument', () => {
     assert.equal(wslDistroOf('C:\\Windows\\system32\\wsl.exe', ['--distribution', 'kali-linux']), 'kali-linux')
     // No -d: the default distro, which only the registry can name.
     assert.equal(wslDistroOf('C:\\Windows\\system32\\wsl.exe', []), '')
-    // The legacy "Bash on Windows" shell is a WSL profile too.
+    // The legacy "Bash on Windows" shell is a WSL profile too — but ONLY the System32 one.
+    // The suite runs on Linux CI where process.env.windir is undefined, so this exercises
+    // wslDistroOf's 'C:\Windows' default.
     assert.equal(wslDistroOf('C:\\Windows\\system32\\bash.exe', []), '')
+    // …and it still counts under a relocated Windows directory.
+    assert.equal(wslDistroOf('D:\\WINNT\\System32\\bash.exe', [], 'D:\\WINNT'), '')
+    // Sysnative is the same binary seen from a 32-bit process.
+    assert.equal(wslDistroOf('C:\\Windows\\Sysnative\\bash.exe', []), '')
     // Case and separators must not matter — a user-edited profile can spell it either way.
     assert.equal(wslDistroOf('C:/Windows/System32/WSL.EXE', ['-d', 'Debian']), 'Debian')
+    // wsl.exe is unambiguous: a bare one (resolved through PATH) or a relocated copy counts.
+    assert.equal(wslDistroOf('wsl.exe', ['-d', 'Ubuntu']), 'Ubuntu')
 })
 
 test('wslDistroOf returns null for anything that is not WSL', () => {
@@ -54,6 +62,11 @@ test('wslDistroOf returns null for anything that is not WSL', () => {
     assert.equal(wslDistroOf('C:\\Program Files\\PowerShell\\7\\pwsh.exe', ['-NoLogo']), null)
     assert.equal(wslDistroOf('/bin/bash', []), null)   // posix bash is not WSL
     assert.equal(wslDistroOf('', []), null)
+    // Tabby's OWN built-in shells whose command basename is bash.exe. Matching on the basename
+    // handed these the default distro's \\wsl$ share — wrong filesystem, and permanent deletes.
+    assert.equal(wslDistroOf('C:\\Program Files\\Git\\bin\\bash.exe', ['--login', '-i']), null)
+    assert.equal(wslDistroOf('C:\\cygwin64\\bin\\bash.exe', []), null)
+    assert.equal(wslDistroOf('C:\\cygwin\\bin\\bash.exe', []), null)
 })
 
 test('wslDistroOf ignores a trailing -d with no value', () => {

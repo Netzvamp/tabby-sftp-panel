@@ -155,7 +155,11 @@ async function clearDestination (to: string, base: string): Promise<boolean> {
         throw e
     }
     if (base) {
-        await fsp.rm(to, { recursive: true, force: true })
+        // No `force`: the stat above already established the entry exists, so nothing here
+        // needs ENOENT swallowed — and swallowing it would let a removal that did NOT happen
+        // report `cleared`, downgrading the overwrite the user asked for into an fs.cp MERGE.
+        // Same reason as `localTrash`: on a WSL share `lstat` of a symlink throws.
+        await fsp.rm(to, { recursive: true })
     } else {
         await req('electron').shell.trashItem(to)
     }
@@ -244,7 +248,13 @@ export async function localTrash (p: string, base = ''): Promise<string | null> 
     try {
         const native = toNativeFsPath(p, base)
         if (base) {
-            await fsp.rm(native, { recursive: true, force: true })
+            // NO `force`. fs.rm begins with an lstat, and WSL's 9p redirector throws ENOENT (or
+            // EISDIR) on lstat of a SYMLINK — of which a distro root is full (/bin, /lib…), and
+            // which this branch is the only one that ever sees. With `force` that ENOENT is
+            // swallowed as "already gone": the user confirms a PERMANENT delete, the panel logs
+            // "Deleted bin", and the link is still there. A path that genuinely vanished between
+            // the listing and here reporting a failure is the far cheaper mistake.
+            await fsp.rm(native, { recursive: true })
         } else {
             await req('electron').shell.trashItem(native)
         }

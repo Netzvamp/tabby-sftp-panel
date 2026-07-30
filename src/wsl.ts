@@ -10,16 +10,26 @@
 
 const req = (window as any).require
 
-const WSL_EXES = ['wsl.exe', 'bash.exe']
-
 /** Which distribution a local profile browses:
  *   - `null` — not a WSL profile at all
  *   - `''`   — WSL, but the DEFAULT distro, whose name only the registry knows
  *   - a name — taken from `-d` / `--distribution`
- *  Pure: the caller supplies `profile.options.command` and `.args`. */
-export function wslDistroOf (command: string, args: string[]): string | null {
-    const exe = (command || '').split(/[\\/]/).pop()?.toLowerCase() ?? ''
-    if (!WSL_EXES.includes(exe)) { return null }
+ *  Pure: the caller supplies `profile.options.command` and `.args`. `windir` is a parameter
+ *  only so the System32 test is testable off Windows; production always takes the default. */
+export function wslDistroOf (command: string, args: string[], windir = process.env.windir ?? 'C:\\Windows'): string | null {
+    const norm = (p: string) => (p || '').replace(/[\\/]+/g, '\\').toLowerCase().replace(/\\+$/, '')
+    const exe = norm(command)
+    const sys = norm(windir)
+    // `wsl.exe` is unambiguous, so a bare or relocated one still counts. `bash.exe` is NOT:
+    // Git for Windows and both Cygwins ship one too (see _tabby-ref/tabby-electron/src/shells/
+    // gitBash.ts, cygwin64.ts, cygwin32.ts — all type 'local', all with command basename
+    // bash.exe). Matching those on the basename handed a Git Bash tab the default distro's
+    // share — a filesystem its shell is not even in, including its PERMANENT deletes. Only
+    // the System32 bash.exe is the legacy "Bash on Windows" WSL entry point; Sysnative is the
+    // same binary seen from a 32-bit process.
+    const isWsl = exe === 'wsl.exe' || exe.endsWith('\\wsl.exe')
+    const isLegacyBash = exe === `${sys}\\system32\\bash.exe` || exe === `${sys}\\sysnative\\bash.exe`
+    if (!isWsl && !isLegacyBash) { return null }
     // `length - 1`: a trailing '-d' with no value must not read undefined off the end and
     // build a base of '\\wsl$\undefined'.
     for (let i = 0; i < args.length - 1; i++) {

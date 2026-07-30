@@ -491,7 +491,16 @@ export class SftpPanelComponent implements OnDestroy {
         // against it — noisy on Windows, silently wrong on posix where /home/rob exists on
         // both sides. '' makes openIfReady re-resolve the start directory for the new flavour.
         // A same-flavour swap (reconnect) deliberately keeps the folder it was showing.
-        const flavourSwapped = !!swapped && (this.session!.local === true) !== (session.local === true)
+        // The BASE counts as a flavour too, and for exactly the same reason: two local panes
+        // in one split can be two different distributions (\\wsl$\Ubuntu vs \\wsl$\Debian, or
+        // one WSL and one Windows), where /etc/apt exists on both and a kept path would list
+        // the OTHER filesystem behind a byte-identical path bar. A wrapper that has never
+        // opened reports base '' until openSFTP resolves it, so this errs toward an EXTRA
+        // reset — which only re-resolves the start directory, the safe direction.
+        const flavourSwapped = !!swapped && (
+            (this.session!.local === true) !== (session.local === true)
+            || ((this.session as any).base ?? '') !== ((session as any).base ?? '')
+        )
         if (swapped && this.sftp) { this.localEdit.unregisterSession(this.sftp) }
         this.session = session
         if (swapped) { this.sftp = null as any; this.opening = false }
@@ -1021,11 +1030,20 @@ export class SftpPanelComponent implements OnDestroy {
     async open (item: SFTPFile): Promise<void> {
         if (item.isDirectory) { await this.navigate(item.fullPath); return }
         if (item.isSymlink) {
-            const target = path.resolve(this.path, await this.sftp.readlink(item.fullPath))
-            const stat = await this.sftp.stat(target)
-            if (stat.isDirectory) { await this.navigate(item.fullPath); return }
-            if (await this.tryEdit(item, stat.mode, stat.size)) { return }
-            await this.download(item.fullPath, stat.mode, stat.size); return
+            // Bound straight to (dblclick), so an unhandled rejection here would go to Angular's
+            // error handler and never to the panel log. It is not hypothetical: WSL's 9p
+            // redirector rejects readlink, and symlink rows (/bin, /lib…) are ordinary rows on a
+            // based tab. "Listed but not openable" is the design; failing SILENTLY is not.
+            try {
+                const target = path.resolve(this.path, await this.sftp.readlink(item.fullPath))
+                const stat = await this.sftp.stat(target)
+                if (stat.isDirectory) { await this.navigate(item.fullPath); return }
+                if (await this.tryEdit(item, stat.mode, stat.size)) { return }
+                await this.download(item.fullPath, stat.mode, stat.size)
+            } catch (e: any) {
+                this.log.log('error', this.translate.instant('Could not open {name}', { name: item.name }), e?.message ?? String(e))
+            }
+            return
         }
         if (await this.tryEdit(item, item.mode, item.size)) { return }
         await this.download(item.fullPath, item.mode, item.size)
@@ -1842,7 +1860,9 @@ export class SftpPanelComponent implements OnDestroy {
             let count = 0
             try {
                 if (this.isLocal) {
-                    // The recycle bin takes a whole tree in one call — no walk needed.
+                    // One call takes a whole tree — no walk needed. Which call depends on the
+                    // session: the recycle bin without a base, a permanent fs.rm with one
+                    // (a WSL share has no bin; the confirmation above says so).
                     const err = await localTrash(item.fullPath, this.localBase)
                     if (err) { throw new Error(err) }
                     count = 1
