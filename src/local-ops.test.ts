@@ -2,12 +2,26 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdtempSync, writeFileSync, mkdirSync, existsSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import { createRequire } from 'node:module'
 import { toVirtualPath } from './local-path'
 
-;(globalThis as any).window = { require: createRequire(import.meta.url) }
-const { localCopy, localMove, localTrash, localExists } = await import('./local-ops')
+// Overwrite routes the destination through Electron's recycle bin (shell.trashItem), which does
+// not exist under node:test — stand in for it, recording what was binned so the tests can assert
+// the routing, and failing on demand ('bin-fails' in the path) to cover an unusable bin.
+const nodeRequire = createRequire(import.meta.url)
+const binned: string[] = []
+const electronStub = {
+    shell: {
+        trashItem: async (p: string) => {
+            if (p.includes('bin-fails')) { throw new Error('the recycle bin refused this item') }
+            binned.push(p)
+            rmSync(p, { recursive: true, force: true })
+        },
+    },
+}
+;(globalThis as any).window = { require: (m: string) => m === 'electron' ? electronStub : nodeRequire(m) }
+const { localCopy, localMove, localTrash, localExists, localSameEntry } = await import('./local-ops')
 
 const withTempDir = async (fn: (dir: string, vdir: string) => Promise<void>) => {
     const dir = mkdtempSync(join(tmpdir(), 'sftp-panel-ops-'))
@@ -137,6 +151,70 @@ test('copying or moving an item into its own directory is refused', async () => 
         assert.ok(await localCopy(vdir + '/a.txt', vdir, true))
         assert.ok(await localMove(vdir + '/a.txt', vdir, true))
         assert.equal(readFileSync(join(dir, 'a.txt')).toString(), 'hello')
+    })
+})
+
+// The same directory spelled with different case. On a case-INSENSITIVE volume (every Windows
+// volume by default, macOS by default) this names the very same folder, so copy/move into it is
+// the item onto itself — the case a resolved-string compare misses and `fs.cp`'s dev+ino check
+// catches. On a case-sensitive volume it is simply a directory that does not exist, so the
+// assertions below (an error, and an intact source) hold there too; only the identity MESSAGE is
+// asserted where the probe says the volume is case-insensitive.
+const caseVariant = (dir: string) => join(dirname(dir), basename(dir).replace('sftp-panel-ops-', 'SFTP-PANEL-OPS-'))
+
+test('copying an item into a case-different spelling of its own directory does not destroy it', async () => {
+    await withTempDir(async (dir, vdir) => {
+        writeFileSync(join(dir, 'a.txt'), 'hello')
+        const other = caseVariant(dir)
+        const insensitive = existsSync(other)
+        assert.equal(await localSameEntry(vdir + '/a.txt', toVirtualPath(other)), insensitive)
+        const err = await localCopy(vdir + '/a.txt', toVirtualPath(other), true)
+        assert.ok(err, 'must refuse, not bin the source and then fail the copy')
+        if (insensitive) { assert.match(err as string, /source and the destination are the same/) }
+        assert.equal(readFileSync(join(dir, 'a.txt')).toString(), 'hello', 'the source must survive')
+    })
+})
+
+test('moving an item into a case-different spelling of its own directory does not destroy it', async () => {
+    await withTempDir(async (dir, vdir) => {
+        writeFileSync(join(dir, 'a.txt'), 'hello')
+        const other = caseVariant(dir)
+        const err = await localMove(vdir + '/a.txt', toVirtualPath(other), true)
+        assert.ok(err)
+        if (existsSync(other)) { assert.match(err as string, /source and the destination are the same/) }
+        assert.equal(readFileSync(join(dir, 'a.txt')).toString(), 'hello', 'the source must survive')
+    })
+})
+
+test('overwrite sends the destination to the recycle bin, not fs.rm', async () => {
+    await withTempDir(async (dir, vdir) => {
+        writeFileSync(join(dir, 'a.txt'), 'new')
+        mkdirSync(join(dir, 'dest'))
+        writeFileSync(join(dir, 'dest', 'a.txt'), 'old')
+        binned.length = 0
+        assert.equal(await localCopy(vdir + '/a.txt', vdir + '/dest', true), null)
+        assert.deepEqual(binned, [join(dir, 'dest', 'a.txt')])
+    })
+})
+
+test('an unusable recycle bin fails the overwrite and leaves the destination alone', async () => {
+    await withTempDir(async (dir, vdir) => {
+        writeFileSync(join(dir, 'a.txt'), 'new')
+        mkdirSync(join(dir, 'bin-fails'))
+        writeFileSync(join(dir, 'bin-fails', 'a.txt'), 'old')
+        const err = await localCopy(vdir + '/a.txt', vdir + '/bin-fails', true)
+        assert.match(err as string, /recycle bin/)
+        assert.equal(readFileSync(join(dir, 'bin-fails', 'a.txt')).toString(), 'old')
+    })
+})
+
+test('an overwrite that fails after the removal says the destination is already in the bin', async () => {
+    await withTempDir(async (dir, vdir) => {
+        mkdirSync(join(dir, 'dest'))
+        writeFileSync(join(dir, 'dest', 'gone.txt'), 'old')
+        // Source vanished between the listing and the copy — the destination is already binned.
+        const err = await localCopy(vdir + '/gone.txt', vdir + '/dest', true)
+        assert.match(err as string, /already been moved to the recycle bin/)
     })
 })
 

@@ -18,7 +18,7 @@ import { ChmodDialogComponent } from './chmod-dialog.component'
 import { CopyMoveDialogComponent } from './copy-move-dialog.component'
 import { LocalEditService } from './local-edit.service'
 import { toVirtualPath, toNativePath, isVirtualRoot, isDriveRoot, isWin } from './local-path'
-import { localCopy, localMove, localTrash, localExists } from './local-ops'
+import { localCopy, localMove, localTrash, localExists, localSameEntry } from './local-ops'
 
 type Col = 'name' | 'size' | 'modified' | 'owner' | 'group' | 'perms'
 // Thrown to unwind a cancelled recursive scan cleanly out of the (recursive) descendant walk.
@@ -1292,7 +1292,10 @@ export class SftpPanelComponent implements OnDestroy {
             if (this.isLocal) {
                 const name = path.basename(t.fullPath)
                 let overwrite = false
-                if (await localExists(dest, name)) {
+                // Identity first: an item whose destination IS itself (a case-different spelling
+                // of the folder it already sits in, on a case-insensitive volume) must be refused
+                // by localMove, not preceded by an overwrite prompt that can never be honoured.
+                if (!await localSameEntry(t.fullPath, dest) && await localExists(dest, name)) {
                     const choice = await this.confirmLocalOverwrite(path.join(dest, name))
                     if (choice === 'cancel') { break }
                     if (choice === 'skip') { continue }
@@ -1327,7 +1330,8 @@ export class SftpPanelComponent implements OnDestroy {
             for (const t of targets) {
                 const name = path.basename(t.fullPath)
                 let overwrite = false
-                if (await localExists(dest, name)) {
+                // See applyServerMove: identity is checked before the collision prompt.
+                if (!await localSameEntry(t.fullPath, dest) && await localExists(dest, name)) {
                     const choice = await this.confirmLocalOverwrite(path.join(dest, name))
                     if (choice === 'cancel') { break }
                     if (choice === 'skip') { continue }

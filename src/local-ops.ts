@@ -26,10 +26,37 @@ export async function localExists (destDir: string, name: string): Promise<boole
     }
 }
 
-/** Source and destination resolved natively, or a message if either is unusable.
- *  Copying/moving an item onto itself would (with `overwrite`) delete the source first, so
- *  that case is refused rather than handled. */
-function endpoints (src: string, destDir: string): { from: string, to: string } | string {
+/** The same identity test `fs.cp` runs before it refuses (`ERR_FS_CP_EINVAL`): device + inode,
+ *  never resolved path STRINGS. `path.win32.resolve` preserves case, so on a case-insensitive
+ *  volume — every Windows volume by default, and macOS by default — a destination typed with
+ *  different case for the folder the item already sits in compares unequal while naming the very
+ *  same file. With `overwrite` that meant binning the SOURCE and then failing the copy.
+ *  A destination that does not exist has no identity to collide with. */
+async function sameEntry (from: string, to: string): Promise<boolean> {
+    try {
+        const [a, b] = await Promise.all([fsp.stat(from), fsp.stat(to)])
+        return a.dev === b.dev && a.ino === b.ino
+    } catch {
+        return false
+    }
+}
+
+const SAME_ENTRY = 'the source and the destination are the same'
+
+/** Whether copy/move would target the very file it is reading. The panel calls this BEFORE the
+ *  collision prompt, so a same-entry attempt is refused outright instead of asking the user to
+ *  confirm an overwrite that can never happen. */
+export async function localSameEntry (src: string, destDir: string): Promise<boolean> {
+    try {
+        const from = toNativeFsPath(src)
+        return await sameEntry(from, nodePath.join(toNativeFsPath(destDir), nodePath.basename(from)))
+    } catch {
+        return false
+    }
+}
+
+/** Source and destination resolved natively, or a message if either is unusable. */
+async function endpoints (src: string, destDir: string): Promise<{ from: string, to: string } | string> {
     const refused = refuseDriveRoot(src)
     if (refused) { return refused }
     let from: string, to: string
@@ -39,47 +66,73 @@ function endpoints (src: string, destDir: string): { from: string, to: string } 
     } catch (e: any) {
         return e?.message ?? String(e)
     }
-    if (nodePath.resolve(from) === nodePath.resolve(to)) { return 'the source and the destination are the same' }
+    // Backstop for the panel's own pre-prompt check — and the guard that keeps `clearDestination`
+    // from binning the source.
+    if (await sameEntry(from, to)) { return SAME_ENTRY }
     return { from, to }
 }
 
 /** "Overwrite" means REPLACE, for both files and directories and for both copy and move:
  *  fs.rename cannot replace a non-empty directory at all (EPERM/ENOTEMPTY) and fs.cp merges
- *  into one, so the destination is removed first once the user has consented. */
+ *  into one, so the destination goes first once the user has consented.
+ *  Via the RECYCLE BIN, like `localTrash`: consenting to "Overwrite" is not consent to a
+ *  permanent delete, and the panel never hard-deletes locally. A failing bin is reported, never
+ *  quietly downgraded to `fs.rm`. */
 async function clearDestination (to: string): Promise<void> {
-    await fsp.rm(to, { recursive: true, force: true })
+    await req('electron').shell.trashItem(to)
+}
+
+/** The destination is removed BEFORE the copy/rename, so a failure there (EBUSY/EACCES on a
+ *  locked file is routine on Windows, ENOSPC, a source that vanished) leaves it gone. Say so —
+ *  the item is in the recycle bin, not lost, and the user cannot tell from a raw errno. */
+function afterClear (e: any, cleared: boolean): string {
+    const msg = e?.message ?? String(e)
+    return cleared ? `${msg}; the existing destination had already been moved to the recycle bin` : msg
 }
 
 /** Recursive copy of `src` INTO the directory `destDir`, keeping its basename.
  *  `overwrite` (the user said so at the collision prompt) replaces the destination entry. */
 export async function localCopy (src: string, destDir: string, overwrite = false): Promise<string | null> {
-    const ends = endpoints(src, destDir)
+    const ends = await endpoints(src, destDir)
     if (typeof ends === 'string') { return ends }
+    if (overwrite) {
+        try {
+            await clearDestination(ends.to)
+        } catch (e: any) {
+            return `could not move the existing destination to the recycle bin: ${e?.message ?? String(e)}`
+        }
+    }
     try {
-        if (overwrite) { await clearDestination(ends.to) }
         // Without consent, never clobber: the panel only gets here when the destination did
         // not exist a moment ago, so anything present now appeared behind the user's back.
         await fsp.cp(ends.from, ends.to, { recursive: true, errorOnExist: !overwrite, force: overwrite })
         return null
     } catch (e: any) {
-        return e?.message ?? String(e)
+        return afterClear(e, overwrite)
     }
 }
 
 /** Move `src` INTO the directory `destDir`. Falls back to copy-then-delete across volumes,
  *  where rename fails with EXDEV. */
 export async function localMove (src: string, destDir: string, overwrite = false): Promise<string | null> {
-    const ends = endpoints(src, destDir)
+    const ends = await endpoints(src, destDir)
     if (typeof ends === 'string') { return ends }
+    if (overwrite) {
+        try {
+            await clearDestination(ends.to)
+        } catch (e: any) {
+            return `could not move the existing destination to the recycle bin: ${e?.message ?? String(e)}`
+        }
+    }
     try {
-        if (overwrite) { await clearDestination(ends.to) }
         await fsp.rename(ends.from, ends.to)
         return null
     } catch (e: any) {
-        if (e?.code !== 'EXDEV') { return e?.message ?? String(e) }
-        // The destination is already gone when overwrite was consented to, so the copy leg
-        // must not be asked to overwrite again (and must not merge into a leftover).
-        const copyErr = await localCopy(src, destDir, overwrite)
+        if (e?.code !== 'EXDEV') { return afterClear(e, overwrite) }
+        // The destination is already in the bin when overwrite was consented to, so the copy leg
+        // must NOT be asked to overwrite again — there is nothing left to clear, and asking
+        // trashItem to bin a path that no longer exists would fail the move outright.
+        const copyErr = await localCopy(src, destDir, false)
         if (copyErr) { return `cross-device move stopped partway through the copy; the destination may hold a partial copy: ${copyErr}` }
         try {
             await fsp.rm(ends.from, { recursive: true, force: true })

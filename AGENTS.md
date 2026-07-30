@@ -70,8 +70,8 @@ src/
                       does differently: `fs.cp` copy, rename-with-EXDEV-fallback move,
                       recycle-bin delete via Electron `shell.trashItem`, and an existence check
                       the panel uses to gate a same-name overwrite behind a confirm prompt.
-                      Overwrite means REPLACE (destination removed first, files and dirs
-                      alike); drive roots and self-into-self are refused
+                      Overwrite means REPLACE (destination goes to the RECYCLE BIN first, files
+                      and dirs alike); drive roots refused, and same-entry refused by dev+ino
   sftp-util.ts        pure helpers — file type/icon/mode, sort/filter, sizes/times, perms
                       (octalToPerms/permsToOctal), owners (parseLsOwners/parseNames), log
                       (LogEntry/logFullText/computeLogSelection), start-path (resolveStartPath),
@@ -80,7 +80,7 @@ src/
                       (filterLocalCols/effectiveSortColumn)
   logic.ts            dock math (clampSize/dockSize) — clampSize reused for transfer-list height
   *.test.ts           node:test units for sftp-util (32) + logic (4) + i18n (2) + local-path (10)
-                      + local-fs.session (9) + local-ops (14) = 71
+                      + local-fs.session (9) + local-ops (19) = 76
                       i18n.test.ts guards the catalogs: identical msgid sets, no empty msgstr
 docs/superpowers/      specs + plans (design of record)
 _tabby-ref/            full Tabby source, READ-ONLY reference. NOT ours. Ignore in globs.
@@ -96,8 +96,8 @@ loads the built file, not the source.
 ```
 npm run build      # webpack → dist/index.js
 npm run watch      # rebuild on change
-npm test           # tsx --test src/*.test.ts — 71 units (sftp-util 32 + logic 4 + i18n 2 +
-                    # local-path 10 + local-fs.session 9 + local-ops 14)
+npm test           # tsx --test src/*.test.ts — 76 units (sftp-util 32 + logic 4 + i18n 2 +
+                    # local-path 10 + local-fs.session 9 + local-ops 19)
 npx tsc --noEmit -p tsconfig.json   # REQUIRED type-check — build does NOT type-check
 ```
 
@@ -276,9 +276,20 @@ publishing now needs a passkey/WebAuthn; that's the fallback if CI is ever broke
   a local-tab copy/move overwrites a same-named destination, `local-ops.ts`'s `localExists()` gates
   a confirm prompt (overwrite / skip / cancel, asked once per colliding item — no "apply to all",
   see `confirmLocalOverwrite` in panel.component.ts) and **"Overwrite" means REPLACE** — local-ops
-  `fs.rm`s the destination first, because `fs.rename` cannot replace a non-empty directory
+  removes the destination first, because `fs.rename` cannot replace a non-empty directory
   (EPERM on win32, ENOTEMPTY on posix) and `fs.cp {recursive, force}` MERGES into one; the
-  prompt's wording cannot say "merge" without a new msgid in all seven catalogs. The SSH path
+  prompt's wording cannot say "merge" without a new msgid in all seven catalogs. Three rules hang
+  off that removal, all of them paid for in blood: (1) it goes through the **recycle bin**
+  (`shell.trashItem`, the same call `localTrash` uses) — consenting to Overwrite is not consent to
+  a permanent delete, and a bin that fails is reported, never downgraded to `fs.rm`; (2) same-entry
+  is detected by **`fs.stat` dev+ino, never by comparing resolved path strings** — `path.win32
+  .resolve` preserves case, so on a case-insensitive volume (Windows, macOS by default) a
+  case-different spelling of the folder an item already sits in compares unequal while naming the
+  same file, and the removal would then bin the SOURCE (`fs.cp`'s own dev+ino check used to catch
+  this, but the removal now runs first); the panel checks identity BEFORE the collision prompt, so
+  that case is never presented as an overwrite; (3) a copy/rename that fails after the removal
+  (EBUSY/EACCES on a locked file is routine on Windows) says the destination is already in the bin,
+  since a raw errno leaves the user with a vanished folder and no idea where it went. The SSH path
   (`sftp.rename`, server-side cp/mv)
   deliberately still overwrites silently, as it always has — don't "fix" that asymmetry without
   checking the deferred-decisions note first. **Column/sort gating is view-only:** `filterLocalCols`
