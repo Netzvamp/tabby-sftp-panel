@@ -1265,16 +1265,20 @@ export class SftpPanelComponent implements OnDestroy {
         const modal = this.ngbModal.open(CopyMoveDialogComponent)
         const inst = modal.componentInstance as CopyMoveDialogComponent
         inst.itemCount = targets.length
-        // Native on a local tab: a virtual path is meaningless outside the panel, and
-        // prefilling one would teach the wrong format for a field the user then edits.
+        // Native on an ordinary local tab: a virtual path is meaningless outside the panel,
+        // and prefilling one would teach the wrong format for a field the user then edits. A
+        // BASED session is the exception (see displayPath): its virtual path already is what
+        // the user wants to see and to type back.
         inst.dest = this.displayPath(this.path)
         const result = await modal.result.catch(() => null) as { dest: string, op: 'copy' | 'move' } | null
         if (!result) { return }
         const typed = result.dest.trim()
         if (!typed) { return }
         // Back to a virtual path for everything downstream (toVirtualPath is idempotent, so a
-        // user who types a virtual path still works, as before).
-        const dest = this.isLocal ? toVirtualPath(typed) : typed
+        // user who types a virtual path still works, as before). A BASED session is the
+        // exception: what the user typed already IS a virtual path, and converting it would
+        // rewrite a backslash — legal in a Linux filename — into a path separator.
+        const dest = this.isLocal && !this.localBase ? toVirtualPath(typed) : typed
         if (result.op === 'move') {
             await this.applyServerMove(targets, dest)
         } else {
@@ -1617,8 +1621,9 @@ export class SftpPanelComponent implements OnDestroy {
             // keys drive the switch below; buttons are their translated display labels (same order).
             const keys = ['Overwrite', ...(more ? ['Overwrite all'] : []), 'Skip', ...(more ? ['Skip all'] : [])]
             const buttons = keys.map(k => this.translate.instant(k))
-            // On a local tab there is no server and the virtual path is meaningless outside
-            // the panel — reuse the copy/move prompt's msgid with a native path instead.
+            // On a local tab there is no server — reuse the copy/move prompt's msgid instead,
+            // with a native path on an ordinary local tab and the (already-real) virtual path
+            // on a based one.
             const target = targetOf(it)
             const res = await this.platform.showMessageBox({
                 type: 'warning',
