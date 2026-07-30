@@ -4,6 +4,7 @@ import { SftpPanelComponent } from './panel.component'
 import { LogService } from './log.service'
 import { dockSize } from './logic'
 import { LocalFsSession } from './local-fs.session'
+import { wslBaseFor } from './wsl'
 
 const STRIP = 24  // collapsed strip width (px) with the vertical label
 const STRIP_SLIM = 8  // collapsed strip width (px) when the label is hidden
@@ -110,7 +111,20 @@ export class PanelMountService {
         if (!w) {
             w = {
                 local: true,
-                openSFTP: async () => new LocalFsSession(),
+                // A WSL tab is a local tab running wsl.exe. Resolving the share here rather
+                // than in the panel keeps the lookup on the one code path that already knows
+                // the pane, and `base`/`uid` are assigned before openSFTP() resolves — which
+                // is the earliest moment the panel can observe them.
+                base: '',
+                uid: 1000,
+                openSFTP: async () => {
+                    const wsl = this.config.store?.sftpPanel?.wslTabs
+                        ? await wslBaseFor(pane.profile)
+                        : null
+                    w.base = wsl?.base ?? ''
+                    w.uid = wsl?.uid ?? 1000
+                    return new LocalFsSession(w.base)
+                },
                 getCwd: () => pane.session?.getWorkingDirectory?.() ?? Promise.resolve(null),
             }
             this.localSessions.set(pane, w)

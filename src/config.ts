@@ -13,6 +13,7 @@ export class SftpPanelConfigProvider extends ConfigProvider {
             startDirectory: '~',      // first-open folder: absolute path, or '~' for remote home
             showHidden: true,         // show dotfiles (toggle button in the panel header)
             localTabs: true,          // also mount the panel on local terminal tabs (local filesystem)
+            wslTabs: true,            // on a WSL tab, browse the distro filesystem instead of Windows
             fileClickAction: 'edit',  // 'edit' | 'download' (double-click a file)
             editorEnabled: false,     // master switch: off = normal Tabby behavior (OS default app)
             editorPath: '',           // editor exe used when enabled; blank while enabled = OS default too

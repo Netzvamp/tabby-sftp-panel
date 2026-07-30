@@ -63,6 +63,13 @@ const req = (window as any).require
       </div>
       <toggle [(ngModel)]="config.store.sftpPanel.localTabs" (ngModelChange)="config.save()"></toggle>
     </div>
+    <div class="form-line" *ngIf="isWindows">
+      <div class="header">
+        <div class="title">{{ 'Browse the WSL filesystem on WSL tabs' | translate }}</div>
+        <div class="description">{{ 'On a WSL tab the panel shows that distribution files instead of the Windows drives. Delete is permanent there, because a WSL share has no recycle bin.' | translate }}</div>
+      </div>
+      <toggle [(ngModel)]="config.store.sftpPanel.wslTabs" (ngModelChange)="config.save()"></toggle>
+    </div>
     <div class="form-line">
       <div class="header">
         <div class="title">{{ 'Show vertical label on collapsed strip' | translate }}</div>
@@ -83,6 +90,9 @@ const req = (window as any).require
   `,
 })
 export class SftpPanelSettingsTabComponent {
+  // WSL exists only on Windows, so the option is meaningless anywhere else.
+  readonly isWindows = process.platform === 'win32'
+
   constructor (public config: ConfigService, private localEdit: LocalEditService, private zone: NgZone) {}
 
   // Turning the feature on: if no path yet, try to auto-detect one (Windows only). Blank stays blank.
