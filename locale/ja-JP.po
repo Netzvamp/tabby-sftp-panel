@@ -352,3 +352,9 @@ msgstr "再読み込みするとローカルのコピーが置き換えられ、
 
 msgid "No open connection to {host}"
 msgstr "{host} への接続が開いていません"
+
+msgid "Reconnect and save"
+msgstr "再接続して保存"
+
+msgid "Open a new tab to save {name}?"
+msgstr "{name} を保存するために新しいタブを開きますか?"

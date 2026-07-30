@@ -352,3 +352,9 @@ msgstr "Повторная загрузка заменит локальную к
 
 msgid "No open connection to {host}"
 msgstr "Нет открытого подключения к {host}"
+
+msgid "Reconnect and save"
+msgstr "Переподключиться и сохранить"
+
+msgid "Open a new tab to save {name}?"
+msgstr "Открыть новую вкладку, чтобы сохранить {name}?"

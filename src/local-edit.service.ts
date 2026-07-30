@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core'
-import { ConfigService, PlatformService, TranslateService } from 'tabby-core'
+import { ConfigService, PlatformService, TranslateService, ProfilesService } from 'tabby-core'
 import { Subject, debounceTime, debounce } from 'rxjs'
 import { parseFtypeExe, describeSftpError, hostKey, editKey, SessionRegistry } from './sftp-util'
 import { LogService } from './log.service'
@@ -23,6 +23,8 @@ interface OpenEdit {
   mtime: number   // remote mtime (ms) as of the last transfer WE made — the baseline a
                   // conflict is measured against. 0 = unknown, which disables the check.
   watcher: any | null
+  ready: boolean  // false while the first download is still in flight — a re-click during
+                  // that window must not treat the record as usable yet.
 }
 
 @Injectable({ providedIn: 'root' })
@@ -35,6 +37,7 @@ export class LocalEditService {
   // opened a file does not orphan it while another tab to the same server is still up.
   private sessions = new SessionRegistry()
   private hostKeys = new WeakMap<any, string>()
+  private hostProfiles = new Map<string, any>()   // hostKey → SSHProfile, for reconnect offers
   private fallbackSeq = 0
 
   constructor (
@@ -42,6 +45,7 @@ export class LocalEditService {
     private platform: PlatformService,
     private translate: TranslateService,
     private log: LogService,
+    private profilesService: ProfilesService,
   ) {
     // beforeunload fires on quit and on reload alike, and rmSync is synchronous, so the
     // deletes complete before the window goes away. A hard kill still leaks — OS temp sweep.
@@ -65,19 +69,18 @@ export class LocalEditService {
     const key = hostKey(profile) || `session-${++this.fallbackSeq}`
     this.hostKeys.set(sftp, key)
     this.sessions.add(key, sftp)
+    if (profile) { this.hostProfiles.set(key, profile) }
     sftp.closed$?.subscribe(() => this.unregisterSession(sftp))
   }
 
-  // Last handle for a server gone → nothing can upload there any more, so stop watching and
-  // drop that server's temp copies. Other tabs to the same server keep the edits alive.
+  // A handle going away no longer ends the edit: the temp copy, the watcher and the record
+  // all survive, so a save after the tab (or the connection) is gone can offer to reconnect.
+  // Only window unload deletes temp copies.
   unregisterSession (sftp: any): void {
     const key = this.hostKeys.get(sftp)
     if (!key) { return }
     this.hostKeys.delete(sftp)
-    if (!this.sessions.remove(key, sftp)) { return }
-    for (const edit of [...this.openEdits.values()]) {
-      if (edit.hostKey === key) { this.rmTemp(edit) }
-    }
+    this.sessions.remove(key, sftp)
   }
 
   private keyFor (sftp: any): string {
@@ -168,7 +171,7 @@ export class LocalEditService {
     const key = editKey(host, item.fullPath)
 
     const existing = this.openEdits.get(key)
-    if (existing) { await this.reopen(existing, opener); return }
+    if (existing && await this.reopen(existing, opener)) { return }
 
     const tempDir = fs.mkdtempSync(nodePath.join(os.tmpdir(), 'sftp-panel-'))  // stdlib mkdtemp, no tmp-promise dep
     const tempPath = nodePath.join(tempDir, item.name)
@@ -181,7 +184,7 @@ export class LocalEditService {
     if (start) { mode = start.mode; size = start.size }
     const edit: OpenEdit = {
       key, hostKey: host, remotePath: item.fullPath, name: item.name,
-      tempDir, tempPath, mode, mtime: +(start?.modified ?? 0), watcher: null,
+      tempDir, tempPath, mode, mtime: +(start?.modified ?? 0), watcher: null, ready: false,
     }
     this.openEdits.set(key, edit)
 
@@ -190,6 +193,7 @@ export class LocalEditService {
       if (!transfer) { this.rmTemp(edit); return }
       await sftp.download(item.fullPath, transfer)
       await opener(tempPath)
+      edit.ready = true
     } catch (e) {
       this.rmTemp(edit)
       throw e
@@ -204,6 +208,7 @@ export class LocalEditService {
   // (Task 3) has to tear the watcher down and build a fresh one on the same path.
   private startWatching (edit: OpenEdit): void {
     if (!this.openEdits.has(edit.key)) { return }   // cleaned up while we waited
+    edit.watcher?.close()                            // never stack two watchers on one file
     const events = new Subject<string>()
     const watcher = fs.watch(edit.tempPath, (ev: string) => events.next(ev))
     edit.watcher = watcher
@@ -211,15 +216,16 @@ export class LocalEditService {
       if (ev === 'rename') { watcher.close() }
       await this.save(edit)
     })).subscribe()
-    watcher.on('close', () => events.complete())
+    watcher.on('close', () => { edit.watcher = null; events.complete() })
   }
 
   // Push the temp file back to the server. The handle is resolved HERE, not captured when
   // the watcher was created, so the save still works after the opening tab is closed.
   private async save (edit: OpenEdit): Promise<void> {
+    if (!this.openEdits.has(edit.key)) { return }   // cleaned up while the save was debouncing
     try {
-      const sftp = this.sessions.any(edit.hostKey)
-      if (!sftp) { throw new Error(this.translate.instant('No open connection to {host}', { host: edit.hostKey })) }
+      const sftp = this.sessions.any(edit.hostKey) ?? await this.reconnect(edit)
+      if (!sftp) { return }
       if (!await this.confirmNoConflict(sftp, edit)) { return }
       const upload = await (this.platform as any).startUpload({ multiple: false }, [edit.tempPath])
       if (!upload.length) { return }
@@ -233,10 +239,49 @@ export class LocalEditService {
     }
   }
 
-  // Already checked out: no download, no second temp copy — just point the editor at the
-  // file we have. Offer a reload first when the server copy moved on since our last
-  // transfer, which is the only moment (short of a save) we can notice that.
-  private async reopen (edit: OpenEdit, opener: Opener): Promise<void> {
+  // No live connection to the file's server. The edit is still valid — its temp copy and
+  // watcher outlive the tab — so offer to bring the server back rather than failing the save.
+  // Opening a real tab reuses Tabby's whole auth flow (passwords, key prompts, known-hosts);
+  // that tab's panel registers its SFTP handle with us as soon as it is up, which is what we
+  // wait for. Returns null when the user declines or the connection never arrives.
+  private async reconnect (edit: OpenEdit): Promise<any | null> {
+    const profile = this.hostProfiles.get(edit.hostKey)
+    if (!profile) { throw new Error(this.translate.instant('No open connection to {host}', { host: edit.hostKey })) }
+
+    const r = await this.platform.showMessageBox({
+      // Electron's dialog supports a 'question' icon; tabby-core's MessageBoxOptions only
+      // types 'warning'|'error' (it just forwards to Electron), so cast the literal through.
+      type: 'question' as any,
+      message: this.translate.instant('No open connection to {host}', { host: edit.hostKey }),
+      detail: this.translate.instant('Open a new tab to save {name}?', { name: edit.name }),
+      buttons: [this.translate.instant('Reconnect and save'), this.translate.instant('Cancel')],
+      defaultId: 0, cancelId: 1,
+    })
+    if (r.response !== 0) {
+      this.log.log('warn', this.translate.instant('Upload cancelled: {name}', { name: edit.name }))
+      return null
+    }
+
+    await this.profilesService.openNewTabForProfile(profile)
+    // No event marks "SFTP ready" — the new panel registers itself, so poll for it. 60s covers
+    // an interactive password/2FA prompt in the new tab.
+    for (let i = 0; i < 120 && !this.sessions.any(edit.hostKey); i++) {
+      await new Promise(res => setTimeout(res, 500))
+    }
+    const sftp = this.sessions.any(edit.hostKey)
+    if (!sftp) { throw new Error(this.translate.instant('No open connection to {host}', { host: edit.hostKey })) }
+    return sftp
+  }
+
+  // Already checked out: no download, no second temp copy — just point the editor at the file
+  // we have. Returns false when the record turned out to be unusable and the caller should
+  // download afresh.
+  private async reopen (edit: OpenEdit, opener: Opener): Promise<boolean> {
+    if (!edit.ready) { return true }               // first download still running — ignore the re-click
+    if (!fs.existsSync(edit.tempPath)) {           // moved away by an atomic-save editor, or swept
+      this.rmTemp(edit)
+      return false
+    }
     const sftp = this.sessions.any(edit.hostKey)
     const remote = sftp ? await this.freshMeta(sftp, edit.remotePath) : null
     if (remote && edit.mtime && +remote.modified > edit.mtime) {
@@ -249,8 +294,10 @@ export class LocalEditService {
       })
       if (r.response === 0) { await this.reload(sftp, edit, remote) }
     }
+    if (!edit.watcher) { this.startWatching(edit) }   // revive a watcher an atomic save closed
     // Runs in both branches: for an editor that is still open this only raises its window.
     await opener(edit.tempPath)
+    return true
   }
 
   // Re-download into a .part sibling to avoid corrupting the real temp file if the download
@@ -271,6 +318,8 @@ export class LocalEditService {
         edit.mode = remote.mode
         edit.mtime = +remote.modified
         fs.chmodSync(edit.tempPath, 0o700)
+      } else {
+        this.log.log('warn', this.translate.instant('Could not open {name}', { name: edit.name }))
       }
     } catch (e: any) {
       // Clean up the part file if the download failed, leaving the original temp copy

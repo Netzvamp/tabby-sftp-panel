@@ -352,3 +352,9 @@ msgstr "Neu laden ersetzt die lokale Kopie und verwirft ungespeicherte Änderung
 
 msgid "No open connection to {host}"
 msgstr "Keine offene Verbindung zu {host}"
+
+msgid "Reconnect and save"
+msgstr "Neu verbinden und speichern"
+
+msgid "Open a new tab to save {name}?"
+msgstr "Neuen Tab öffnen, um {name} zu speichern?"

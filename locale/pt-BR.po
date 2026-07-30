@@ -352,3 +352,9 @@ msgstr "Recarregar substitui a cópia local e descarta as alterações não salv
 
 msgid "No open connection to {host}"
 msgstr "Sem conexão aberta com {host}"
+
+msgid "Reconnect and save"
+msgstr "Reconectar e salvar"
+
+msgid "Open a new tab to save {name}?"
+msgstr "Abrir uma nova aba para salvar {name}?"

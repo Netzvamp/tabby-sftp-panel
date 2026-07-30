@@ -352,3 +352,9 @@ msgstr "Le rechargement remplace la copie locale et abandonne les modifications 
 
 msgid "No open connection to {host}"
 msgstr "Aucune connexion ouverte vers {host}"
+
+msgid "Reconnect and save"
+msgstr "Se reconnecter et enregistrer"
+
+msgid "Open a new tab to save {name}?"
+msgstr "Ouvrir un nouvel onglet pour enregistrer {name} ?"

@@ -352,3 +352,9 @@ msgstr "重新加载会替换本地副本，并丢弃编辑器中未保存的更
 
 msgid "No open connection to {host}"
 msgstr "没有到 {host} 的可用连接"
+
+msgid "Reconnect and save"
+msgstr "重新连接并保存"
+
+msgid "Open a new tab to save {name}?"
+msgstr "打开新标签页以保存 {name}？"

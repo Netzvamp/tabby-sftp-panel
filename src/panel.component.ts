@@ -485,6 +485,7 @@ export class SftpPanelComponent implements OnDestroy {
         // required for recovery — the session swap above handles that on reconnect.
         this.sessionSub?.unsubscribe()
         this.sessionSub = session.willDestroy$?.subscribe(() => {
+            if (this.sftp) { this.localEdit.unregisterSession(this.sftp) }
             this.sftp = null as any
             this.cdr.detectChanges()
         })
