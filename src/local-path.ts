@@ -20,8 +20,20 @@ export function toNativePath (virtual: string, win = isWin): string {
  *  not rooted at a drive (`/foo`, or a UNC path flattened by toVirtualPath) would come back
  *  RELATIVE — every `fs` call then resolves it against Tabby's own working directory and
  *  writes into the install folder. There is no correct native path to fall back on, so refuse
- *  loudly instead. Every fs boundary (LocalFsSession, local-ops) goes through this. */
-export function toNativeFsPath (virtual: string, win = isWin): string {
+ *  loudly instead. Every fs boundary (LocalFsSession, local-ops) goes through this.
+ *
+ *  `base` makes the session rooted somewhere else entirely: a WSL distro share
+ *  (`\\wsl$\Ubuntu`). There the virtual paths ARE the distribution's own posix paths, so the
+ *  drive rule does not apply — the base carries the only native prefix there is, and the only
+ *  requirement is that the path be absolute. `win32.resolve` stops at the share root, so a
+ *  stray `..` cannot escape the base. */
+export function toNativeFsPath (virtual: string, base = '', win = isWin): string {
+    if (base) {
+        if (!virtual.startsWith('/')) { throw new Error(`${virtual} is not an absolute path`) }
+        const sep = win ? '\\' : '/'
+        const rel = virtual.replace(/^\/+/, '').replace(/\//g, sep)
+        return rel ? base + sep + rel : base
+    }
     const native = toNativePath(virtual, win)
     if (win && !/^[A-Za-z]:[\\/]/.test(native)) {
         throw new Error(`${virtual} is not a path on any drive`)
