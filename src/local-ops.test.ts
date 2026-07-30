@@ -163,9 +163,10 @@ test('copying or moving an item into its own directory is refused', async () => 
 // The same directory spelled with different case. On a case-INSENSITIVE volume (every Windows
 // volume by default, macOS by default) this names the very same folder, so copy/move into it is
 // the item onto itself — the case a resolved-string compare misses and `fs.cp`'s dev+ino check
-// catches. On a case-sensitive volume it is simply a directory that does not exist, so the
-// assertions below (an error, and an intact source) hold there too; only the identity MESSAGE is
-// asserted where the probe says the volume is case-insensitive.
+// catches. On a case-SENSITIVE volume the very same call is a legitimate copy into a directory
+// that merely does not exist yet, and `fs.cp` creates the missing parent, so it MUST succeed
+// there. Only the refusal is probe-gated; the source surviving is asserted either way, and that
+// is the assertion that fails loudly if a future change starts binning the source.
 const caseVariant = (dir: string) => join(dirname(dir), basename(dir).replace('sftp-panel-ops-', 'SFTP-PANEL-OPS-'))
 
 test('copying an item into a case-different spelling of its own directory does not destroy it', async () => {
@@ -175,8 +176,12 @@ test('copying an item into a case-different spelling of its own directory does n
         const insensitive = existsSync(other)
         assert.equal(await localRefusal(vdir + '/a.txt', toVirtualPath(other)) !== null, insensitive)
         const err = await localCopy(vdir + '/a.txt', toVirtualPath(other), true)
-        assert.ok(err, 'must refuse, not bin the source and then fail the copy')
-        if (insensitive) { assert.match(err as string, /source and the destination are the same/) }
+        if (insensitive) {
+            assert.ok(err, 'must refuse, not bin the source and then fail the copy')
+            assert.match(err as string, /source and the destination are the same/)
+        } else {
+            assert.equal(err, null, 'on a case-sensitive volume this is an ordinary copy elsewhere')
+        }
         assert.equal(readFileSync(join(dir, 'a.txt')).toString(), 'hello', 'the source must survive')
     })
 })
@@ -185,9 +190,12 @@ test('moving an item into a case-different spelling of its own directory does no
     await withTempDir(async (dir, vdir) => {
         writeFileSync(join(dir, 'a.txt'), 'hello')
         const other = caseVariant(dir)
+        const insensitive = existsSync(other)
         const err = await localMove(vdir + '/a.txt', toVirtualPath(other), true)
+        // Case-sensitive volume: the destination directory genuinely does not exist and rename
+        // does not create it, so this errors for an ordinary reason rather than being refused.
         assert.ok(err)
-        if (existsSync(other)) { assert.match(err as string, /source and the destination are the same/) }
+        if (insensitive) { assert.match(err as string, /source and the destination are the same/) }
         assert.equal(readFileSync(join(dir, 'a.txt')).toString(), 'hello', 'the source must survive')
     })
 })
