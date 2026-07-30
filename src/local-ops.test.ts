@@ -369,3 +369,79 @@ test('localExists reports true for a colliding basename and false otherwise', as
         assert.equal(await localExists(vdir, 'nope.txt'), false)
     })
 })
+
+test('a based copy resolves both endpoints under the base', async () => {
+    await withTempDir(async (dir) => {
+        mkdirSync(join(dir, 'home'), { recursive: true })
+        mkdirSync(join(dir, 'srv'))
+        writeFileSync(join(dir, 'home', 'a.txt'), 'hello')
+        assert.equal(await localCopy('/home/a.txt', '/srv', false, dir), null)
+        assert.equal(readFileSync(join(dir, 'srv', 'a.txt')).toString(), 'hello')
+    })
+})
+
+test('a based localExists and localRefusal see the same tree', async () => {
+    await withTempDir(async (dir) => {
+        mkdirSync(join(dir, 'srv'))
+        writeFileSync(join(dir, 'srv', 'a.txt'), 'x')
+        writeFileSync(join(dir, 'a.txt'), 'y')
+        assert.equal(await localExists('/srv', 'a.txt', dir), true)
+        assert.equal(await localExists('/srv', 'nope.txt', dir), false)
+        assert.equal(await localRefusal('/a.txt', '/srv', dir), null)
+        // The overlap guard must work in base coordinates too: a directory into its own subtree.
+        mkdirSync(join(dir, 'srv', 'inner'))
+        assert.match(await localRefusal('/srv', '/srv/inner', dir) ?? '', /overlap/)
+    })
+})
+
+test('a based delete is permanent and never touches the recycle bin', async () => {
+    await withTempDir(async (dir) => {
+        mkdirSync(join(dir, 'home'))
+        writeFileSync(join(dir, 'home', 'a.txt'), 'x')
+        const before = binned.length
+        assert.equal(await localTrash('/home/a.txt', dir), null)
+        assert.ok(!existsSync(join(dir, 'home', 'a.txt')), 'the file must be gone')
+        assert.equal(binned.length, before, 'a WSL share has no recycle bin to route through')
+    })
+})
+
+test('a based delete removes a whole tree', async () => {
+    await withTempDir(async (dir) => {
+        mkdirSync(join(dir, 'home', 'tree', 'sub'), { recursive: true })
+        writeFileSync(join(dir, 'home', 'tree', 'sub', 'deep.txt'), 'x')
+        assert.equal(await localTrash('/home/tree', dir), null)
+        assert.ok(!existsSync(join(dir, 'home', 'tree')))
+    })
+})
+
+test('a based overwrite deletes the destination permanently and says so on failure', async () => {
+    await withTempDir(async (dir) => {
+        mkdirSync(join(dir, 'srv'))
+        writeFileSync(join(dir, 'a.txt'), 'new')
+        writeFileSync(join(dir, 'srv', 'a.txt'), 'old')
+        const before = binned.length
+        assert.equal(await localCopy('/a.txt', '/srv', true, dir), null)
+        assert.equal(readFileSync(join(dir, 'srv', 'a.txt')).toString(), 'new')
+        assert.equal(binned.length, before, 'the bin must not be involved on a base')
+    })
+})
+
+test('a based failure after clearing says the destination was deleted, not binned', async () => {
+    await withTempDir(async (dir) => {
+        mkdirSync(join(dir, 'srv'))
+        writeFileSync(join(dir, 'srv', 'a.txt'), 'old')
+        // Source vanishes after the destination is cleared: the copy then fails, and the user
+        // must be told their destination is gone for good rather than sitting in a bin.
+        writeFileSync(join(dir, 'a.txt'), 'new')
+        const fsp = (globalThis as any).window.require('fs').promises
+        const realCp = fsp.cp
+        fsp.cp = async () => { throw new Error('EBUSY: resource busy or locked') }
+        try {
+            const err = await localCopy('/a.txt', '/srv', true, dir)
+            assert.match(err ?? '', /deleted permanently/)
+            assert.doesNotMatch(err ?? '', /recycle bin/)
+        } finally {
+            fsp.cp = realCp
+        }
+    })
+})
