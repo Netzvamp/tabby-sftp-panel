@@ -7,6 +7,18 @@ const fs = req('fs'), fsp = fs.promises, nodePath = req('path')
 // and returns null on success or a message on failure, so the panel can log uniformly
 // without a try/catch per call site.
 
+/** Whether `destDir` already holds an entry named `name` — the collision check the panel
+ *  runs before a local copy/move, since fs.cp/fs.rename overwrite silently and there is no
+ *  server-side fallback to recover a clobbered local file from. */
+export async function localExists (destDir: string, name: string): Promise<boolean> {
+    try {
+        await fsp.stat(nodePath.join(toNativePath(destDir), name))
+        return true
+    } catch {
+        return false
+    }
+}
+
 /** Recursive copy of `src` INTO the directory `destDir`, keeping its basename. */
 export async function localCopy (src: string, destDir: string): Promise<string | null> {
     const from = toNativePath(src)
@@ -30,7 +42,7 @@ export async function localMove (src: string, destDir: string): Promise<string |
     } catch (e: any) {
         if (e?.code !== 'EXDEV') { return e?.message ?? String(e) }
         const copyErr = await localCopy(src, destDir)
-        if (copyErr) { return copyErr }
+        if (copyErr) { return `cross-device move stopped partway through the copy; the destination may hold a partial copy: ${copyErr}` }
         try {
             await fsp.rm(from, { recursive: true, force: true })
             return null

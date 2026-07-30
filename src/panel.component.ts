@@ -18,7 +18,7 @@ import { ChmodDialogComponent } from './chmod-dialog.component'
 import { CopyMoveDialogComponent } from './copy-move-dialog.component'
 import { LocalEditService } from './local-edit.service'
 import { toVirtualPath } from './local-path'
-import { localCopy, localMove, localTrash } from './local-ops'
+import { localCopy, localMove, localTrash, localExists } from './local-ops'
 
 type Col = 'name' | 'size' | 'modified' | 'owner' | 'group' | 'perms'
 // Thrown to unwind a cancelled recursive scan cleanly out of the (recursive) descendant walk.
@@ -1186,12 +1186,40 @@ export class SftpPanelComponent implements OnDestroy {
         if (result.op === 'move' || dest === this.path) { await this.navigate(this.path) }
     }
 
+    // Ask once per colliding item on a local tab before an overwrite — fs.rename/fs.cp
+    // replace a same-named destination silently, and unlike SFTP there is no server-side
+    // copy to fall back on if that turns out to be the wrong file. No "apply to all": the
+    // human ruling on this scoped it to one prompt per collision, matching deleteSelected's
+    // confirm-then-focusBody idiom rather than uploadFiles' resolveCollisions "all" options.
+    private async confirmLocalOverwrite (targetPath: string): Promise<'overwrite' | 'skip' | 'cancel'> {
+        const keys = ['Overwrite', 'Skip', 'Cancel']
+        const res = await this.platform.showMessageBox({
+            type: 'warning',
+            message: this.translate.instant('{target} already exists.', { target: targetPath }),
+            buttons: keys.map(k => this.translate.instant(k)), defaultId: keys.indexOf('Cancel'), cancelId: keys.indexOf('Cancel'),
+        })
+        // Native dialog steals focus; hand it back to the list either way.
+        this.focusBody()
+        switch (keys[res.response]) {
+            case 'Overwrite': return 'overwrite'
+            case 'Skip': return 'skip'
+            default: return 'cancel'
+        }
+    }
+
     private async applyServerMove (targets: SFTPFile[], dest: string): Promise<void> {
         const failures: string[] = []
+        let moved = 0
         for (const t of targets) {
             if (this.isLocal) {
+                const name = path.basename(t.fullPath)
+                if (await localExists(dest, name)) {
+                    const choice = await this.confirmLocalOverwrite(path.join(dest, name))
+                    if (choice === 'cancel') { break }
+                    if (choice === 'skip') { continue }
+                }
                 const err = await localMove(t.fullPath, dest)
-                if (err) { failures.push(`${t.fullPath}: ${err}`) }
+                if (err) { failures.push(`${t.fullPath}: ${err}`) } else { moved++ }
                 continue
             }
             const target = path.join(dest, path.basename(t.fullPath))
@@ -1204,22 +1232,33 @@ export class SftpPanelComponent implements OnDestroy {
         }
         if (failures.length > 0) {
             this.log.log('error', this.translate.instant('Move failed on {n} item(s)', { n: failures.length }), failures.join('\n'))
-        } else {
+        } else if (!this.isLocal) {
             this.log.log('info', this.translate.instant('Moved {n} item(s) to {dest}', { n: targets.length, dest }))
+        } else if (moved > 0) {
+            // Skipped/cancelled items are neither failures nor "moved" — don't overclaim the count.
+            this.log.log('info', this.translate.instant('Moved {n} item(s) to {dest}', { n: moved, dest }))
         }
     }
 
     private async applyServerCopy (targets: SFTPFile[], dest: string): Promise<void> {
         if (this.isLocal) {
             const failures: string[] = []
+            let copied = 0
             for (const t of targets) {
+                const name = path.basename(t.fullPath)
+                if (await localExists(dest, name)) {
+                    const choice = await this.confirmLocalOverwrite(path.join(dest, name))
+                    if (choice === 'cancel') { break }
+                    if (choice === 'skip') { continue }
+                }
                 const err = await localCopy(t.fullPath, dest)
-                if (err) { failures.push(`${t.fullPath}: ${err}`) }
+                if (err) { failures.push(`${t.fullPath}: ${err}`) } else { copied++ }
             }
             if (failures.length > 0) {
                 this.log.log('error', this.translate.instant('Copy failed'), failures.join('\n'))
-            } else {
-                this.log.log('info', this.translate.instant('Copied {n} item(s) to {dest}', { n: targets.length, dest }))
+            } else if (copied > 0) {
+                // Skipped/cancelled items are neither failures nor "copied" — don't overclaim the count.
+                this.log.log('info', this.translate.instant('Copied {n} item(s) to {dest}', { n: copied, dest }))
             }
             return
         }
