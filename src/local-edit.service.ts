@@ -167,6 +167,9 @@ export class LocalEditService {
     const host = this.keyFor(sftp)
     const key = editKey(host, item.fullPath)
 
+    const existing = this.openEdits.get(key)
+    if (existing) { await this.reopen(existing, opener); return }
+
     const tempDir = fs.mkdtempSync(nodePath.join(os.tmpdir(), 'sftp-panel-'))  // stdlib mkdtemp, no tmp-promise dep
     const tempPath = nodePath.join(tempDir, item.name)
 
@@ -227,6 +230,49 @@ export class LocalEditService {
       edit.mtime = +((await this.freshMeta(sftp, edit.remotePath))?.modified ?? 0)
     } catch (e: any) {
       this.reportUploadFailure(edit.name, edit.tempPath, e)
+    }
+  }
+
+  // Already checked out: no download, no second temp copy — just point the editor at the
+  // file we have. Offer a reload first when the server copy moved on since our last
+  // transfer, which is the only moment (short of a save) we can notice that.
+  private async reopen (edit: OpenEdit, opener: Opener): Promise<void> {
+    const sftp = this.sessions.any(edit.hostKey)
+    const remote = sftp ? await this.freshMeta(sftp, edit.remotePath) : null
+    if (remote && edit.mtime && +remote.modified > edit.mtime) {
+      const r = await this.platform.showMessageBox({
+        type: 'warning',
+        message: this.translate.instant('{name} changed on the server since you opened it', { name: edit.name }),
+        detail: this.translate.instant('Reloading replaces the local copy and discards unsaved editor changes.'),
+        buttons: [this.translate.instant('Reload from server'), this.translate.instant('Keep the local copy')],
+        defaultId: 1, cancelId: 1,
+      })
+      if (r.response === 0) { await this.reload(sftp, edit, remote) }
+    }
+    // Runs in both branches: for an editor that is still open this only raises its window.
+    await opener(edit.tempPath)
+  }
+
+  // Re-download into the SAME temp path, so an editor that already has the file open sees a
+  // change instead of losing it. The watcher is closed first and rebuilt afterwards: our own
+  // write would otherwise bounce straight back as an upload, and a download that replaces the
+  // file rather than truncating it would leave the old watcher on an unlinked inode.
+  private async reload (sftp: any, edit: OpenEdit, remote: any): Promise<void> {
+    edit.watcher?.close()
+    edit.watcher = null
+    try {
+      const transfer = await (this.platform as any).startDownload(edit.name, remote.mode, remote.size, edit.tempPath)
+      if (transfer) {
+        await sftp.download(edit.remotePath, transfer)
+        edit.mode = remote.mode
+        edit.mtime = +remote.modified
+        fs.chmodSync(edit.tempPath, 0o700)
+      }
+    } catch (e: any) {
+      // Keep the local copy and the old baseline; the user still gets their editor.
+      this.log.log('error', this.translate.instant('Could not open {name}', { name: edit.name }), describeSftpError(e))
+    } finally {
+      setTimeout(() => this.startWatching(edit), 1000)   // skip our own write burst
     }
   }
 
