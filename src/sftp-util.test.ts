@@ -297,3 +297,22 @@ test('SessionRegistry hands out any live session and reports the last one leavin
   assert.equal(r.any('h'), null)
   assert.equal(r.remove('h', b), false)   // removing twice is not a "last one out" again
 })
+
+import { filterLocalCols, effectiveSortColumn } from './sftp-util'
+test('filterLocalCols: passes through remote, drops owner/group locally, perms only on win', () => {
+  const cols = ['name', 'size', 'owner', 'group', 'perms']
+  assert.deepEqual(filterLocalCols(cols, false, false), cols)                       // remote: untouched
+  assert.deepEqual(filterLocalCols(cols, false, true), cols)                        // remote: isWin irrelevant
+  assert.deepEqual(filterLocalCols(cols, true, false), ['name', 'size', 'perms'])   // local posix: keeps perms
+  assert.deepEqual(filterLocalCols(cols, true, true), ['name', 'size'])             // local windows: drops perms too
+  assert.notEqual(filterLocalCols(cols, false, false), cols)                        // new array, not the input
+})
+test('effectiveSortColumn: coerces owner/group to name only when local, else passes through', () => {
+  assert.equal(effectiveSortColumn('owner', true), 'name')
+  assert.equal(effectiveSortColumn('group', true), 'name')
+  assert.equal(effectiveSortColumn('owner', false), 'owner')     // remote: unchanged
+  assert.equal(effectiveSortColumn('group', false), 'group')     // remote: unchanged
+  assert.equal(effectiveSortColumn('name', true), 'name')
+  assert.equal(effectiveSortColumn('size', true), 'size')
+  assert.equal(effectiveSortColumn('modified', true), 'modified')
+})

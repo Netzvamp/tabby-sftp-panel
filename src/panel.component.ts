@@ -11,7 +11,7 @@ import {
 } from 'tabby-core'
 import type { SFTPSession, SFTPFile } from 'tabby-ssh'
 import { SFTPContextMenuItemProvider } from 'tabby-ssh'
-import { getIcon, getModeString, sortFiles, filterFiles, formatSize, formatFileTime, formatTransferTime, computeLogSelection, SortColumn, SortDir, LogEntry, startNeedsHome, resolveStartPath, parseLsOwners, PanelFile, moveColumn, expandDirs, isBigFile, parseNames, shQuote, buildCpCommand, folderEntryFromParent, describeSftpError } from './sftp-util'
+import { getIcon, getModeString, sortFiles, filterFiles, formatSize, formatFileTime, formatTransferTime, computeLogSelection, SortColumn, SortDir, LogEntry, startNeedsHome, resolveStartPath, parseLsOwners, PanelFile, moveColumn, expandDirs, isBigFile, parseNames, shQuote, buildCpCommand, folderEntryFromParent, describeSftpError, filterLocalCols, effectiveSortColumn } from './sftp-util'
 import { clampSize } from './logic'
 import { LogService } from './log.service'
 import { ChmodDialogComponent } from './chmod-dialog.component'
@@ -420,11 +420,7 @@ export class SftpPanelComponent implements OnDestroy {
 
     get columnOrder (): Col[] { return this.config.store.sftpPanel.columnOrder }
     orderedCols (): Col[] {
-        const cols = this.columnOrder.filter(k => this.col[k].visible)
-        if (!this.isLocal) { return cols }
-        // Owner/group are ls -l derived (SSH exec only). Permissions are meaningless on
-        // Windows, where fs.chmod only toggles the read-only bit.
-        return cols.filter(k => k !== 'owner' && k !== 'group' && !(isWin && k === 'perms'))
+        return filterLocalCols(this.columnOrder.filter(k => this.col[k].visible), this.isLocal, isWin)
     }
     cellClass (k: Col): string { return this.cellClasses[k] }
     onHeaderClick (k: Col): void { if (k !== 'perms') { this.setSort(k as SortColumn) } }  // perms not sortable
@@ -669,7 +665,9 @@ export class SftpPanelComponent implements OnDestroy {
         if (!this.fileList) { this.viewList = []; return }
         const s = this.config.store.sftpPanel.sort
         const list = this.showHidden ? this.fileList : this.fileList.filter(i => !i.name.startsWith('.'))
-        const sorted = sortFiles(list, s.column as SortColumn, s.dir as SortDir)
+        // View-level coercion only — never written back, so an SSH tab elsewhere keeps its
+        // own persisted owner/group sort. See effectiveSortColumn's doc comment.
+        const sorted = sortFiles(list, effectiveSortColumn(s.column as SortColumn, this.isLocal), s.dir as SortDir)
         this.viewList = filterFiles(sorted, this.filterActive() ? this.filterText : '')
     }
     get showHidden (): boolean { return this.config.store.sftpPanel.showHidden }
@@ -688,7 +686,7 @@ export class SftpPanelComponent implements OnDestroy {
     }
     sortIs (column: SortColumn, dir: SortDir): boolean {
         const s = this.config.store.sftpPanel.sort
-        return s.column === column && s.dir === dir
+        return effectiveSortColumn(s.column as SortColumn, this.isLocal) === column && s.dir === dir
     }
 
     // ---- filter ----
@@ -728,7 +726,10 @@ export class SftpPanelComponent implements OnDestroy {
         ev.preventDefault()
         ev.stopPropagation()   // don't bubble to the blank-area folder menu on .sp-body
         const c = this.col
-        const items: MenuItemOptions[] = this.columnOrder.map(k => ({
+        // Same filter as orderedCols(): a column hidden locally must not offer a checkbox that
+        // (a) does nothing when ticked and (b) would write into the global config, silently
+        // hiding that column on every SSH tab too.
+        const items: MenuItemOptions[] = filterLocalCols(this.columnOrder, this.isLocal, isWin).map(k => ({
             label: this.translate.instant(this.colLabels[k]),
             type: 'checkbox',
             checked: c[k].visible,
@@ -1087,13 +1088,18 @@ export class SftpPanelComponent implements OnDestroy {
     async showFolderContextMenu (event: MouseEvent): Promise<void> {
         if (!this.sftp || this.fileList === null) { return }
         event.preventDefault()
+        // Same virtual-vs-native distinction as copyPath().
+        const folderPath = this.isLocal ? toNativePath(this.path) : this.path
         const items: MenuItemOptions[] = [
             { label: this.translate.instant('Create file…'), click: () => this.openCreateFileModal() },
             { label: this.translate.instant('Create directory…'), click: () => this.openCreateDirectoryModal() },
             { type: 'separator' },
-            { label: this.translate.instant('Copy path'), click: () => navigator.clipboard.writeText(this.path).catch(() => this.log.log('warn', this.translate.instant('Copy failed'))) },
-            { label: this.translate.instant('Permissions…'), click: () => this.openFolderChmod() },
+            { label: this.translate.instant('Copy path'), click: () => navigator.clipboard.writeText(folderPath).catch(() => this.log.log('warn', this.translate.instant('Copy failed'))) },
         ]
+        // Windows chmod only toggles the read-only bit, so an rwx grid there would be a lie.
+        if (!(this.isLocal && isWin)) {
+            items.push({ label: this.translate.instant('Permissions…'), click: () => this.openFolderChmod() })
+        }
         this.platform.popupContextMenu(items, event)
     }
 
@@ -1182,7 +1188,10 @@ export class SftpPanelComponent implements OnDestroy {
         // Copy the whole selection if the clicked row is part of it, else just this row.
         const selected = this.selectedItems()
         const targets = selected.some(i => i.fullPath === item.fullPath) && selected.length > 1 ? selected : [item]
-        navigator.clipboard.writeText(targets.map(i => i.fullPath).join('\n'))
+        // On a local tab the virtual path (e.g. /C:/Users/x/y.txt on Windows) is unusable
+        // anywhere the user would paste it — copy the native OS path instead.
+        const paths = this.isLocal ? targets.map(i => toNativePath(i.fullPath)) : targets.map(i => i.fullPath)
+        navigator.clipboard.writeText(paths.join('\n'))
             .catch(() => this.log.log('warn', this.translate.instant('Copy failed')))
     }
 

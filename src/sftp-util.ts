@@ -270,6 +270,25 @@ export function moveColumn (order: string[], drag: string, drop: string): string
     return next
 }
 
+// Owner/Group are ls -l parsed (SSH exec only, meaningless on a local filesystem); Permissions
+// is a lie on Windows (fs.chmod only toggles the read-only bit). One predicate shared by the
+// panel's orderedCols() and headerMenu() so a column that's hidden locally can never end up
+// with a live (but dead) checkbox in the header menu, and by effectiveSortColumn() below.
+export function filterLocalCols<T extends string> (cols: readonly T[], isLocal: boolean, isWin: boolean): T[] {
+    if (!isLocal) { return cols.slice() as T[] }
+    return cols.filter(k => k !== 'owner' && k !== 'group' && !(isWin && k === 'perms')) as T[]
+}
+
+// A sort persisted on Owner/Group strands the local view: those fields are never populated
+// locally, so every comparison is 0, the list falls back to raw readdir order, and no caret is
+// drawn anywhere because the owner/group header isn't rendered. Falls back to 'name'. Deliberately
+// takes no `isWin` — Permissions isn't sortable (see the panel's onHeaderClick), so it never
+// appears in a SortColumn. View-level only: never write this back into the persisted config, so
+// an SSH tab elsewhere keeps its own owner/group sort.
+export function effectiveSortColumn (column: SortColumn, isLocal: boolean): SortColumn {
+    return filterLocalCols([column], isLocal, false).length > 0 ? column : 'name'
+}
+
 // True when a file is big enough to warrant a "might be binary" confirmation
 // before opening it in a text editor. limitMB <= 0 disables the check.
 export function isBigFile (size: number, limitMB: number): boolean {
