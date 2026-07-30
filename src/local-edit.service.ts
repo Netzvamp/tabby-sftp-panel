@@ -225,7 +225,7 @@ export class LocalEditService {
     if (!this.openEdits.has(edit.key)) { return }   // cleaned up while the save was debouncing
     try {
       const sftp = this.sessions.any(edit.hostKey) ?? await this.reconnect(edit)
-      if (!sftp) { return }
+      if (!sftp || !this.openEdits.has(edit.key)) { return }
       if (!await this.confirmNoConflict(sftp, edit)) { return }
       const upload = await (this.platform as any).startUpload({ multiple: false }, [edit.tempPath])
       if (!upload.length) { return }
@@ -249,9 +249,7 @@ export class LocalEditService {
     if (!profile) { throw new Error(this.translate.instant('No open connection to {host}', { host: edit.hostKey })) }
 
     const r = await this.platform.showMessageBox({
-      // Electron's dialog supports a 'question' icon; tabby-core's MessageBoxOptions only
-      // types 'warning'|'error' (it just forwards to Electron), so cast the literal through.
-      type: 'question' as any,
+      type: 'warning',
       message: this.translate.instant('No open connection to {host}', { host: edit.hostKey }),
       detail: this.translate.instant('Open a new tab to save {name}?', { name: edit.name }),
       buttons: [this.translate.instant('Reconnect and save'), this.translate.instant('Cancel')],
@@ -284,6 +282,7 @@ export class LocalEditService {
     }
     const sftp = this.sessions.any(edit.hostKey)
     const remote = sftp ? await this.freshMeta(sftp, edit.remotePath) : null
+    let reloaded = false
     if (remote && edit.mtime && +remote.modified > edit.mtime) {
       const r = await this.platform.showMessageBox({
         type: 'warning',
@@ -292,9 +291,12 @@ export class LocalEditService {
         buttons: [this.translate.instant('Reload from server'), this.translate.instant('Keep the local copy')],
         defaultId: 1, cancelId: 1,
       })
-      if (r.response === 0) { await this.reload(sftp, edit, remote) }
+      if (r.response === 0) { await this.reload(sftp, edit, remote); reloaded = true }
     }
-    if (!edit.watcher) { this.startWatching(edit) }   // revive a watcher an atomic save closed
+    // reload() owns restarting the watcher on its own 1s-delayed timer (to skip its download's
+    // write burst) — only revive here when reload did NOT run, e.g. a watcher an atomic-save
+    // editor closed on its own.
+    if (!reloaded && !edit.watcher) { this.startWatching(edit) }
     // Runs in both branches: for an editor that is still open this only raises its window.
     await opener(edit.tempPath)
     return true
