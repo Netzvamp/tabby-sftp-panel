@@ -16,6 +16,25 @@ export function toNativePath (virtual: string, win = isWin): string {
     return /^[A-Za-z]:$/.test(v) ? v + '\\' : v
 }
 
+/** `toNativePath` for anything about to be handed to `fs`. On win32 a virtual path that is
+ *  not rooted at a drive (`/foo`, or a UNC path flattened by toVirtualPath) would come back
+ *  RELATIVE — every `fs` call then resolves it against Tabby's own working directory and
+ *  writes into the install folder. There is no correct native path to fall back on, so refuse
+ *  loudly instead. Every fs boundary (LocalFsSession, local-ops) goes through this. */
+export function toNativeFsPath (virtual: string, win = isWin): string {
+    const native = toNativePath(virtual, win)
+    if (win && !/^[A-Za-z]:[\\/]/.test(native)) {
+        throw new Error(`${virtual} is not a path on any drive`)
+    }
+    return native
+}
+
+/** A drive-root row from the synthetic root listing ('/C:'). Navigable and nothing else:
+ *  its basename is empty, so copy/move/delete would silently act on the WHOLE drive. */
+export function isDriveRoot (p: string, win = isWin): boolean {
+    return win && /^\/[A-Za-z]:\/?$/.test(p)
+}
+
 export function toVirtualPath (native: string, win = isWin): string {
     if (!win) { return native }
     const v = '/' + native.replace(/\\/g, '/').replace(/^\/+/, '')

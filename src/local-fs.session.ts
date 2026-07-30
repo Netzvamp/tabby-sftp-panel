@@ -1,6 +1,6 @@
 import type { SFTPFile } from 'tabby-ssh'
 import type { FileUpload, FileDownload } from 'tabby-core'
-import { toNativePath, toVirtualPath, isVirtualRoot, driveRoots, isWin } from './local-path'
+import { toNativeFsPath, toVirtualPath, isVirtualRoot, driveRoots, isWin } from './local-path'
 
 // Node builtins via Electron's require — see the window.require note in AGENTS.md.
 const req = (window as any).require
@@ -15,7 +15,7 @@ const CHUNK = 256 * 1024   // same read size russh's SFTPFileHandle uses
 export class LocalFsSession {
     async readdir (p: string): Promise<SFTPFile[]> {
         if (isVirtualRoot(p)) { return this.drives() }
-        const native = toNativePath(p)
+        const native = toNativeFsPath(p)
         const names: string[] = await fsp.readdir(native)
         const out = await Promise.all(names.map(n => this.entry(p, n)))
         // Entries can vanish between readdir and lstat — drop them rather than fail the listing.
@@ -23,14 +23,14 @@ export class LocalFsSession {
     }
 
     async stat (p: string): Promise<SFTPFile> {
-        const native = toNativePath(p)
+        const native = toNativeFsPath(p)
         const st = await fsp.stat(native)          // follows symlinks, like SFTP stat
         const lst = await fsp.lstat(native).catch(() => st)
         return this.toFile(p, st, lst.isSymbolicLink())
     }
 
     async readlink (p: string): Promise<string> {
-        const target: string = await fsp.readlink(toNativePath(p))
+        const target: string = await fsp.readlink(toNativeFsPath(p))
         // Absolute targets become virtual; relative ones stay relative — the panel feeds the
         // result to posix.resolve(this.path, target), which needs that distinction intact.
         const rel = isWin ? !/^([A-Za-z]:|\\\\)/.test(target) : !target.startsWith('/')
@@ -42,7 +42,7 @@ export class LocalFsSession {
     // write — an existing file surfaces as EEXIST in the panel log instead of being
     // truncated, which is the safer direction for a "New file" action.
     async open (p: string, _mode: number): Promise<{ read(): Promise<Uint8Array>, write(c: Uint8Array): Promise<void>, close(): Promise<void> }> {
-        const h = await fsp.open(toNativePath(p), 'wx')
+        const h = await fsp.open(toNativeFsPath(p), 'wx')
         return {
             async read () { return new Uint8Array(0) },
             async write (c: Uint8Array) { await h.write(c) },
@@ -50,18 +50,18 @@ export class LocalFsSession {
         }
     }
 
-    async mkdir (p: string): Promise<void> { await fsp.mkdir(toNativePath(p)) }
-    async rmdir (p: string): Promise<void> { await fsp.rmdir(toNativePath(p)) }
-    async unlink (p: string): Promise<void> { await fsp.unlink(toNativePath(p)) }
-    async rename (from: string, to: string): Promise<void> { await fsp.rename(toNativePath(from), toNativePath(to)) }
-    async chmod (p: string, mode: string | number): Promise<void> { await fsp.chmod(toNativePath(p), mode) }
+    async mkdir (p: string): Promise<void> { await fsp.mkdir(toNativeFsPath(p)) }
+    async rmdir (p: string): Promise<void> { await fsp.rmdir(toNativeFsPath(p)) }
+    async unlink (p: string): Promise<void> { await fsp.unlink(toNativeFsPath(p)) }
+    async rename (from: string, to: string): Promise<void> { await fsp.rename(toNativeFsPath(from), toNativeFsPath(to)) }
+    async chmod (p: string, mode: string | number): Promise<void> { await fsp.chmod(toNativeFsPath(p), mode) }
 
     // Streaming through the same FileUpload/FileDownload interface is what keeps drag-in,
     // drag-out, the transfer log rows, the progress bars and the per-row Stop button working
     // with no panel changes at all.
     async download (p: string, transfer: FileDownload): Promise<void> {
         try {
-            const h = await fsp.open(toNativePath(p), 'r')
+            const h = await fsp.open(toNativeFsPath(p), 'r')
             try {
                 const buf = Buffer.allocUnsafe(CHUNK)
                 while (true) {
@@ -81,7 +81,7 @@ export class LocalFsSession {
     // Mirrors SFTPSession.upload: write to a sibling temp file, then swap it in, so a
     // cancelled or failed transfer never leaves a truncated destination.
     async upload (p: string, transfer: FileUpload): Promise<void> {
-        const native = toNativePath(p)
+        const native = toNativeFsPath(p)
         const temp = native + '.tabby-upload'
         try {
             const h = await fsp.open(temp, 'w')
@@ -107,7 +107,7 @@ export class LocalFsSession {
         try {
             // lstat, not stat: SFTP readdir does not follow symlinks either, and following
             // them here would hang on a link into a dead network mount.
-            const st = await fsp.lstat(toNativePath(full))
+            const st = await fsp.lstat(toNativeFsPath(full))
             return this.toFile(full, st, st.isSymbolicLink())
         } catch {
             return null

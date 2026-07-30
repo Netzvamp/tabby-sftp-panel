@@ -17,7 +17,7 @@ import { LogService } from './log.service'
 import { ChmodDialogComponent } from './chmod-dialog.component'
 import { CopyMoveDialogComponent } from './copy-move-dialog.component'
 import { LocalEditService } from './local-edit.service'
-import { toVirtualPath, toNativePath, isWin } from './local-path'
+import { toVirtualPath, toNativePath, isVirtualRoot, isDriveRoot, isWin } from './local-path'
 import { localCopy, localMove, localTrash, localExists } from './local-ops'
 
 type Col = 'name' | 'size' | 'modified' | 'owner' | 'group' | 'perms'
@@ -195,8 +195,8 @@ class StreamDownload extends FileDownload {
         <i class="fas" [class.fa-thumbtack]="config.store.sftpPanel.pinned" [class.fa-map-pin]="!config.store.sftpPanel.pinned"></i>
       </button>
       <button class="btn btn-link btn-sm" [title]="'Refresh' | translate" (click)="navigate(path)"><i class="fas fa-sync-alt"></i></button>
-      <button class="btn btn-link btn-sm" [title]="'Create directory' | translate" (click)="openCreateDirectoryModal()"><i class="fas fa-plus"></i></button>
-      <button class="btn btn-link btn-sm" [title]="'New file' | translate" (click)="openCreateFileModal()"><i class="fas fa-file-medical"></i></button>
+      <button class="btn btn-link btn-sm" *ngIf="!atVirtualRoot()" [title]="'Create directory' | translate" (click)="openCreateDirectoryModal()"><i class="fas fa-plus"></i></button>
+      <button class="btn btn-link btn-sm" *ngIf="!atVirtualRoot()" [title]="'New file' | translate" (click)="openCreateFileModal()"><i class="fas fa-file-medical"></i></button>
       <button class="btn btn-link btn-sm" [title]="(showHidden ? 'Hide dotfiles' : 'Show dotfiles') | translate" (click)="toggleHidden()">
         <i class="fas" [class.fa-eye]="showHidden" [class.fa-eye-slash]="!showHidden"></i>
       </button>
@@ -485,9 +485,16 @@ export class SftpPanelComponent implements OnDestroy {
     // the dead SFTP handle so openIfReady reopens against the new connection.
     async setSession (session: SSHSessionLike): Promise<void> {
         const swapped = this.session && session !== this.session
+        // A swap between a local pane and an SSH pane (mixed split) changes the FILESYSTEM,
+        // not just the connection: keeping this.path would re-navigate the other pane's path
+        // against it — noisy on Windows, silently wrong on posix where /home/rob exists on
+        // both sides. '' makes openIfReady re-resolve the start directory for the new flavour.
+        // A same-flavour swap (reconnect) deliberately keeps the folder it was showing.
+        const flavourSwapped = !!swapped && (this.session!.local === true) !== (session.local === true)
         if (swapped && this.sftp) { this.localEdit.unregisterSession(this.sftp) }
         this.session = session
         if (swapped) { this.sftp = null as any; this.opening = false }
+        if (flavourSwapped) { this.path = '' }
         // Best-effort: if the connection is torn down, flip back to "Connecting…"
         // immediately instead of showing a stale, click-erroring listing. Not
         // required for recovery — the session swap above handles that on reconnect.
@@ -974,6 +981,19 @@ export class SftpPanelComponent implements OnDestroy {
      *  rather than SFTP. Drives the behaviour branches in local-ops and the template. */
     get isLocal (): boolean { return this.session?.local === true }
 
+    /** The synthetic win32 root, whose listing is the drive list. It is not a directory: it
+     *  can be listed and navigated, and nothing else — creating an entry "in" it would
+     *  resolve relative to Tabby's own working directory. */
+    atVirtualRoot (): boolean { return this.isLocal && isVirtualRoot(this.path) }
+
+    /** A drive-root row ('/C:'). Navigable only: its basename is empty, so copy/move/delete
+     *  would act on the entire drive (verified: win32 basename('C:\\') === ''). */
+    private isDriveRow (item: SFTPFile): boolean { return this.isLocal && isDriveRoot(item.fullPath) }
+
+    /** Paths shown to the user: a virtual path is meaningless outside this panel, so local
+     *  tabs get the native one (same rule as "Copy path"). */
+    private displayPath (p: string): string { return this.isLocal ? toNativePath(p) : p }
+
     async open (item: SFTPFile): Promise<void> {
         if (item.isDirectory) { await this.navigate(item.fullPath); return }
         if (item.isSymlink) {
@@ -1035,6 +1055,11 @@ export class SftpPanelComponent implements OnDestroy {
     // ---- context menu ----
     async buildContextMenu (item: SFTPFile): Promise<MenuItemOptions[]> {
         let items: MenuItemOptions[] = []
+        // A drive row is navigable and nothing else — rename/copy/move/delete on 'C:\' act on
+        // the whole drive. Only the harmless path copy is offered.
+        if (this.isDriveRow(item)) {
+            return [{ label: this.translate.instant('Copy path'), click: () => this.copyPath(item) }]
+        }
         if (!this.isLocal) {
             for (const section of await Promise.all(this.contextMenuProviders.map(x => x.getItems(item, this as any)))) {
                 items.push({ type: 'separator' })
@@ -1089,7 +1114,10 @@ export class SftpPanelComponent implements OnDestroy {
         if (!this.sftp || this.fileList === null) { return }
         event.preventDefault()
         // Same virtual-vs-native distinction as copyPath().
-        const folderPath = this.isLocal ? toNativePath(this.path) : this.path
+        // The drive list is not a directory: nothing can be created in it, it has no
+        // permissions and no path worth copying. Navigation only.
+        if (this.atVirtualRoot()) { return }
+        const folderPath = this.displayPath(this.path)
         const items: MenuItemOptions[] = [
             { label: this.translate.instant('Create file…'), click: () => this.openCreateFileModal() },
             { label: this.translate.instant('Create directory…'), click: () => this.openCreateDirectoryModal() },
@@ -1126,6 +1154,9 @@ export class SftpPanelComponent implements OnDestroy {
 
     // ---- create dir / upload / download (reused from Tabby's original) ----
     async openCreateDirectoryModal (): Promise<void> {
+        // Backstop for the hidden button/menu item (this is also called by name from Tabby's
+        // SFTP context menu): a name joined onto the drive list is a RELATIVE native path.
+        if (this.atVirtualRoot()) { return }
         const modal = this.ngbModal.open(PromptModalComponent)
         modal.componentInstance.prompt = this.translate.instant('New directory name')
         const result = await modal.result.catch(() => null)
@@ -1137,6 +1168,7 @@ export class SftpPanelComponent implements OnDestroy {
         }
     }
     async openCreateFileModal (): Promise<void> {
+        if (this.atVirtualRoot()) { return }
         const modal = this.ngbModal.open(PromptModalComponent)
         modal.componentInstance.prompt = this.translate.instant('New file name')
         const result = await modal.result.catch(() => null)
@@ -1163,6 +1195,7 @@ export class SftpPanelComponent implements OnDestroy {
     }
 
     async renameItem (item: SFTPFile): Promise<void> {
+        if (this.isDriveRow(item)) { return }   // F2 on a drive row: not renameable
         const modal = this.ngbModal.open(PromptModalComponent)
         modal.componentInstance.prompt = this.translate.instant('Rename to')
         modal.componentInstance.value = item.name
@@ -1200,17 +1233,24 @@ export class SftpPanelComponent implements OnDestroy {
     // Local: fs.rename with an EXDEV fallback, and fs.cp(recursive) — see local-ops.ts.
     async copyMoveSelected (item: SFTPFile): Promise<void> {
         const selected = this.selectedItems()
-        const targets = selected.some(i => i.fullPath === item.fullPath) && selected.length > 1
+        const targets = (selected.some(i => i.fullPath === item.fullPath) && selected.length > 1
             ? selected
             : [item]
+        ).filter(t => !this.isDriveRow(t))   // a drive row is navigable only, never a copy source
+        if (!targets.length) { return }
         const modal = this.ngbModal.open(CopyMoveDialogComponent)
         const inst = modal.componentInstance as CopyMoveDialogComponent
         inst.itemCount = targets.length
-        inst.dest = this.path
+        // Native on a local tab: a virtual path is meaningless outside the panel, and
+        // prefilling one would teach the wrong format for a field the user then edits.
+        inst.dest = this.displayPath(this.path)
         const result = await modal.result.catch(() => null) as { dest: string, op: 'copy' | 'move' } | null
         if (!result) { return }
-        const dest = result.dest.trim()
-        if (!dest) { return }
+        const typed = result.dest.trim()
+        if (!typed) { return }
+        // Back to a virtual path for everything downstream (toVirtualPath is idempotent, so a
+        // user who types a virtual path still works, as before).
+        const dest = this.isLocal ? toVirtualPath(typed) : typed
         if (result.op === 'move') {
             await this.applyServerMove(targets, dest)
         } else {
@@ -1225,11 +1265,15 @@ export class SftpPanelComponent implements OnDestroy {
     // copy to fall back on if that turns out to be the wrong file. No "apply to all": the
     // human ruling on this scoped it to one prompt per collision, matching deleteSelected's
     // confirm-then-focusBody idiom rather than uploadFiles' resolveCollisions "all" options.
+    // "Overwrite" means REPLACE, for files and directories alike: local-ops removes the
+    // destination entry before the copy/move rather than merging into it (fs.cp merges and
+    // fs.rename cannot replace a non-empty directory at all).
     private async confirmLocalOverwrite (targetPath: string): Promise<'overwrite' | 'skip' | 'cancel'> {
         const keys = ['Overwrite', 'Skip', 'Cancel']
         const res = await this.platform.showMessageBox({
             type: 'warning',
-            message: this.translate.instant('{target} already exists.', { target: targetPath }),
+            // Native path: the virtual one means nothing outside the panel.
+            message: this.translate.instant('{target} already exists.', { target: this.displayPath(targetPath) }),
             buttons: keys.map(k => this.translate.instant(k)), defaultId: keys.indexOf('Cancel'), cancelId: keys.indexOf('Cancel'),
         })
         // Native dialog steals focus; hand it back to the list either way.
@@ -1247,13 +1291,15 @@ export class SftpPanelComponent implements OnDestroy {
         for (const t of targets) {
             if (this.isLocal) {
                 const name = path.basename(t.fullPath)
+                let overwrite = false
                 if (await localExists(dest, name)) {
                     const choice = await this.confirmLocalOverwrite(path.join(dest, name))
                     if (choice === 'cancel') { break }
                     if (choice === 'skip') { continue }
+                    overwrite = true
                 }
-                const err = await localMove(t.fullPath, dest)
-                if (err) { failures.push(`${t.fullPath}: ${err}`) } else { moved++ }
+                const err = await localMove(t.fullPath, dest, overwrite)
+                if (err) { failures.push(`${this.displayPath(t.fullPath)}: ${err}`) } else { moved++ }
                 continue
             }
             const target = path.join(dest, path.basename(t.fullPath))
@@ -1270,7 +1316,7 @@ export class SftpPanelComponent implements OnDestroy {
             this.log.log('info', this.translate.instant('Moved {n} item(s) to {dest}', { n: targets.length, dest }))
         } else if (moved > 0) {
             // Skipped/cancelled items are neither failures nor "moved" — don't overclaim the count.
-            this.log.log('info', this.translate.instant('Moved {n} item(s) to {dest}', { n: moved, dest }))
+            this.log.log('info', this.translate.instant('Moved {n} item(s) to {dest}', { n: moved, dest: this.displayPath(dest) }))
         }
     }
 
@@ -1280,19 +1326,21 @@ export class SftpPanelComponent implements OnDestroy {
             let copied = 0
             for (const t of targets) {
                 const name = path.basename(t.fullPath)
+                let overwrite = false
                 if (await localExists(dest, name)) {
                     const choice = await this.confirmLocalOverwrite(path.join(dest, name))
                     if (choice === 'cancel') { break }
                     if (choice === 'skip') { continue }
+                    overwrite = true
                 }
-                const err = await localCopy(t.fullPath, dest)
-                if (err) { failures.push(`${t.fullPath}: ${err}`) } else { copied++ }
+                const err = await localCopy(t.fullPath, dest, overwrite)
+                if (err) { failures.push(`${this.displayPath(t.fullPath)}: ${err}`) } else { copied++ }
             }
             if (failures.length > 0) {
                 this.log.log('error', this.translate.instant('Copy failed'), failures.join('\n'))
             } else if (copied > 0) {
                 // Skipped/cancelled items are neither failures nor "copied" — don't overclaim the count.
-                this.log.log('info', this.translate.instant('Copied {n} item(s) to {dest}', { n: copied, dest }))
+                this.log.log('info', this.translate.instant('Copied {n} item(s) to {dest}', { n: copied, dest: this.displayPath(dest) }))
             }
             return
         }
@@ -1535,9 +1583,14 @@ export class SftpPanelComponent implements OnDestroy {
             // keys drive the switch below; buttons are their translated display labels (same order).
             const keys = ['Overwrite', ...(more ? ['Overwrite all'] : []), 'Skip', ...(more ? ['Skip all'] : [])]
             const buttons = keys.map(k => this.translate.instant(k))
+            // On a local tab there is no server and the virtual path is meaningless outside
+            // the panel — reuse the copy/move prompt's msgid with a native path instead.
+            const target = targetOf(it)
             const res = await this.platform.showMessageBox({
                 type: 'warning',
-                message: this.translate.instant('{target} already exists on the server.', { target: targetOf(it) }),
+                message: this.isLocal
+                    ? this.translate.instant('{target} already exists.', { target: toNativePath(target) })
+                    : this.translate.instant('{target} already exists on the server.', { target }),
                 buttons, defaultId: 0, cancelId: keys.indexOf('Skip'),
             })
             switch (keys[res.response]) {
@@ -1564,6 +1617,9 @@ export class SftpPanelComponent implements OnDestroy {
     // paints one row per descendant file before our aggregate row appears.
     async onDrop (ev: DragEvent): Promise<void> {
         ev.preventDefault()
+        // Dropping onto the drive list would upload into a relative path, i.e. into Tabby's
+        // own working directory. Nothing can be written there — ignore the drop.
+        if (this.atVirtualRoot()) { return }
         this.log.beginCapture()
         let root: DirectoryUpload
         try { root = await this.platform.startUploadFromDragEvent(ev, true) } finally { this.log.endCapture() }
@@ -1720,7 +1776,9 @@ export class SftpPanelComponent implements OnDestroy {
         }
     }
     async deleteSelected (skipConfirm = false): Promise<void> {
-        const items = this.selectedItems()
+        // A drive row is navigable only — trashing 'C:\' is not a thing the panel offers.
+        const items = this.selectedItems().filter(i => !this.isDriveRow(i))
+        if (!items.length) { return }
         // Shift+Delete bypasses the confirmation dialog.
         if (!skipConfirm) {
             const ok = await this.platform.showMessageBox({

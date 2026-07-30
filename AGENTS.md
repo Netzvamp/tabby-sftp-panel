@@ -60,14 +60,18 @@ src/
   chmod-dialog.component.ts     ChmodDialogComponent — permissions (rwx grid) + owner/group modal
   copy-move-dialog.component.ts CopyMoveDialogComponent — destination input + Copy/Move buttons
   local-path.ts       virtual posix ↔ native path conversion (`/C:/Users/x` ↔ `C:\Users\x`),
-                      drive-root enumeration; pure, `window`-free so `node:test` can import it
+                      drive-root enumeration + `isDriveRoot`, and `toNativeFsPath` — the guarded
+                      conversion EVERY fs call must use; pure, `window`-free so `node:test`
+                      can import it
   local-fs.session.ts `LocalFsSession`, duck-types `SFTPSession` over node `fs` so the panel
                       browses a local tab with no call-site changes; streams `upload`/`download`
                       through the same transfer interface
   local-ops.ts        `localCopy`/`localMove`/`localTrash`/`localExists` — the ops a local tab
                       does differently: `fs.cp` copy, rename-with-EXDEV-fallback move,
                       recycle-bin delete via Electron `shell.trashItem`, and an existence check
-                      the panel uses to gate a same-name overwrite behind a confirm prompt
+                      the panel uses to gate a same-name overwrite behind a confirm prompt.
+                      Overwrite means REPLACE (destination removed first, files and dirs
+                      alike); drive roots and self-into-self are refused
   sftp-util.ts        pure helpers — file type/icon/mode, sort/filter, sizes/times, perms
                       (octalToPerms/permsToOctal), owners (parseLsOwners/parseNames), log
                       (LogEntry/logFullText/computeLogSelection), start-path (resolveStartPath),
@@ -75,8 +79,8 @@ src/
                       (shQuote/buildCpCommand/expandDirs), local-tab column/sort gating
                       (filterLocalCols/effectiveSortColumn)
   logic.ts            dock math (clampSize/dockSize) — clampSize reused for transfer-list height
-  *.test.ts           node:test units for sftp-util (32) + logic (4) + i18n (2) + local-path (7)
-                      + local-fs.session (9) + local-ops (7) = 61
+  *.test.ts           node:test units for sftp-util (32) + logic (4) + i18n (2) + local-path (10)
+                      + local-fs.session (9) + local-ops (14) = 71
                       i18n.test.ts guards the catalogs: identical msgid sets, no empty msgstr
 docs/superpowers/      specs + plans (design of record)
 _tabby-ref/            full Tabby source, READ-ONLY reference. NOT ours. Ignore in globs.
@@ -92,8 +96,8 @@ loads the built file, not the source.
 ```
 npm run build      # webpack → dist/index.js
 npm run watch      # rebuild on change
-npm test           # tsx --test src/*.test.ts — 61 units (sftp-util 32 + logic 4 + i18n 2 +
-                    # local-path 7 + local-fs.session 9 + local-ops 7)
+npm test           # tsx --test src/*.test.ts — 71 units (sftp-util 32 + logic 4 + i18n 2 +
+                    # local-path 10 + local-fs.session 9 + local-ops 14)
 npx tsc --noEmit -p tsconfig.json   # REQUIRED type-check — build does NOT type-check
 ```
 
@@ -252,7 +256,17 @@ publishing now needs a passkey/WebAuthn; that's the fallback if CI is ever broke
   '..')` does not recognise `C:/` as a root — it prepends `process.cwd()` and returns garbage. So
   `LocalFsSession` presents *virtual* posix paths (`/C:/Users/x`) and converts to native only at
   the fs boundary; `/` is a synthetic root whose listing is the drive list (probe `A:\`…`Z:\` with
-  `existsSync` — no `wmic`). A local pane is detected by `tab.profile?.type === 'local'` and handed
+  `existsSync` — no `wmic`). **`toNativePath` relativises anything not rooted at a drive**
+  (`/foo` → `foo`, and UNC flattens to the same shape), which every `fs` call would then resolve
+  against Tabby's own cwd, i.e. write into the install directory — so every fs boundary uses
+  `toNativeFsPath`, which throws instead. Two rows/paths are navigable and NOTHING else, guarded in
+  the panel and backstopped in `local-ops.ts`: the virtual root (`atVirtualRoot()` hides create
+  file/dir and ignores drops — you cannot create "in" a drive list) and a drive row (`isDriveRoot`,
+  because `win32.basename('C:\\')` is `''`, so `join(dest, '')` is `dest` and a "copy C:" would
+  clone the whole drive over it). **`setSession` resets `this.path` when the swap crosses the
+  local/remote boundary** (mixed splits): the same-flavour reconnect deliberately restores its
+  folder, but carrying `/home/rob` from an SSH pane onto the local filesystem silently shows a
+  different, identical-looking directory. A local pane is detected by `tab.profile?.type === 'local'` and handed
   a **stable** wrapper object (cached per pane in a `WeakMap`): `setSession()` treats a different
   object as a reconnect and drops the open handle, so a fresh wrapper per focus change would reopen
   the listing every time. Local sessions have no `shell` field, so `openIfReady`'s shell-channel
@@ -261,13 +275,22 @@ publishing now needs a passkey/WebAuthn; that's the fallback if CI is ever broke
   `exec()` returns `null` without an `ssh` object. **Local overwrite confirm is one-sided:** before
   a local-tab copy/move overwrites a same-named destination, `local-ops.ts`'s `localExists()` gates
   a confirm prompt (overwrite / skip / cancel, asked once per colliding item — no "apply to all",
-  see `confirmLocalOverwrite` in panel.component.ts); the SSH path (`sftp.rename`, server-side cp/mv)
+  see `confirmLocalOverwrite` in panel.component.ts) and **"Overwrite" means REPLACE** — local-ops
+  `fs.rm`s the destination first, because `fs.rename` cannot replace a non-empty directory
+  (EPERM on win32, ENOTEMPTY on posix) and `fs.cp {recursive, force}` MERGES into one; the
+  prompt's wording cannot say "merge" without a new msgid in all seven catalogs. The SSH path
+  (`sftp.rename`, server-side cp/mv)
   deliberately still overwrites silently, as it always has — don't "fix" that asymmetry without
   checking the deferred-decisions note first. **Column/sort gating is view-only:** `filterLocalCols`
   and `effectiveSortColumn` in `sftp-util.ts` are the single source of truth for which columns a
   local tab shows (owner/group hidden everywhere, permissions posix-only) and which column it
   actually sorts by; the sort coercion (owner/group → name) happens at the view layer and is never
   written back to config, so an SSH tab elsewhere keeps its own owner/group sort untouched.
+  **Virtual paths never reach the user:** anything shown or prefilled on a local tab goes through
+  `displayPath()`/`toNativePath` (Copy path, both overwrite prompts, the Copy/Move destination
+  field, copy/move log lines), and the dialog's answer is converted back with `toVirtualPath`
+  (idempotent, so a typed virtual path still works). The drag-in collision prompt reuses the
+  copy/move msgid `'{target} already exists.'` locally — `'…on the server.'` is remote-only.
 
 ## Status
 
