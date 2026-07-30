@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, writeFileSync, mkdirSync, existsSync, readFileSync, rmSync } from 'node:fs'
+import { mkdtempSync, writeFileSync, mkdirSync, existsSync, readFileSync, rmSync, symlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
 import { createRequire } from 'node:module'
@@ -11,17 +11,23 @@ import { toVirtualPath } from './local-path'
 // the routing, and failing on demand ('bin-fails' in the path) to cover an unusable bin.
 const nodeRequire = createRequire(import.meta.url)
 const binned: string[] = []
+// Fires right after a successful bin — lets a test simulate the source vanishing mid-operation.
+let afterBin: (() => void) | null = null
 const electronStub = {
     shell: {
         trashItem: async (p: string) => {
             if (p.includes('bin-fails')) { throw new Error('the recycle bin refused this item') }
+            // The real trashItem REJECTS on a missing path (fs.rm({force:true}) used to no-op),
+            // so the stub must too or it cannot see a caller that bins blind.
+            if (!existsSync(p)) { throw new Error(`ENOENT: no such file or directory, trashItem '${p}'`) }
             binned.push(p)
             rmSync(p, { recursive: true, force: true })
+            afterBin?.()
         },
     },
 }
 ;(globalThis as any).window = { require: (m: string) => m === 'electron' ? electronStub : nodeRequire(m) }
-const { localCopy, localMove, localTrash, localExists, localSameEntry } = await import('./local-ops')
+const { localCopy, localMove, localTrash, localExists, localRefusal } = await import('./local-ops')
 
 const withTempDir = async (fn: (dir: string, vdir: string) => Promise<void>) => {
     const dir = mkdtempSync(join(tmpdir(), 'sftp-panel-ops-'))
@@ -167,7 +173,7 @@ test('copying an item into a case-different spelling of its own directory does n
         writeFileSync(join(dir, 'a.txt'), 'hello')
         const other = caseVariant(dir)
         const insensitive = existsSync(other)
-        assert.equal(await localSameEntry(vdir + '/a.txt', toVirtualPath(other)), insensitive)
+        assert.equal(await localRefusal(vdir + '/a.txt', toVirtualPath(other)) !== null, insensitive)
         const err = await localCopy(vdir + '/a.txt', toVirtualPath(other), true)
         assert.ok(err, 'must refuse, not bin the source and then fail the copy')
         if (insensitive) { assert.match(err as string, /source and the destination are the same/) }
@@ -210,11 +216,84 @@ test('an unusable recycle bin fails the overwrite and leaves the destination alo
 
 test('an overwrite that fails after the removal says the destination is already in the bin', async () => {
     await withTempDir(async (dir, vdir) => {
+        writeFileSync(join(dir, 'a.txt'), 'new')
+        mkdirSync(join(dir, 'dest'))
+        writeFileSync(join(dir, 'dest', 'a.txt'), 'old')
+        // The source disappears in the window between the bin and the copy — the real-world shape
+        // is a locked file (EBUSY/EACCES on Windows) or ENOSPC, which a test cannot stage portably.
+        afterBin = () => rmSync(join(dir, 'a.txt'))
+        try {
+            const err = await localCopy(vdir + '/a.txt', vdir + '/dest', true)
+            assert.match(err as string, /already been moved to the recycle bin/)
+        } finally { afterBin = null }
+    })
+})
+
+test('an operation that cannot succeed never bins the destination first', async () => {
+    await withTempDir(async (dir, vdir) => {
         mkdirSync(join(dir, 'dest'))
         writeFileSync(join(dir, 'dest', 'gone.txt'), 'old')
-        // Source vanished between the listing and the copy — the destination is already binned.
+        binned.length = 0
+        // Source vanished before we started: knowable from its stat, so bail before removing.
         const err = await localCopy(vdir + '/gone.txt', vdir + '/dest', true)
-        assert.match(err as string, /already been moved to the recycle bin/)
+        assert.match(err as string, /no longer exists/)
+        assert.deepEqual(binned, [], 'nothing may be binned for an operation that cannot run')
+        assert.equal(readFileSync(join(dir, 'dest', 'gone.txt')).toString(), 'old')
+    })
+})
+
+test('a destination deleted while the prompt was open counts as already cleared', async () => {
+    await withTempDir(async (dir, vdir) => {
+        writeFileSync(join(dir, 'a.txt'), 'new')
+        mkdirSync(join(dir, 'dest'))
+        binned.length = 0
+        // localExists said the destination was there; the user then deleted it in their file
+        // manager and clicked Overwrite. trashItem would reject on the missing path — don't call it.
+        assert.equal(await localCopy(vdir + '/a.txt', vdir + '/dest', true), null)
+        assert.equal(readFileSync(join(dir, 'dest', 'a.txt')).toString(), 'new')
+        assert.deepEqual(binned, [])
+    })
+})
+
+test('copying or moving a folder into its own subfolder is refused before anything is binned', async () => {
+    await withTempDir(async (dir, vdir) => {
+        // <root>/b/c/b: dev+ino of the endpoints differ, so only the containment check sees it.
+        mkdirSync(join(dir, 'b', 'c', 'b'), { recursive: true })
+        writeFileSync(join(dir, 'b', 'keep.txt'), 'x')
+        writeFileSync(join(dir, 'b', 'c', 'b', 'inner.txt'), 'y')
+        binned.length = 0
+        for (const op of [localCopy, localMove]) {
+            const err = await op(vdir + '/b', vdir + '/b/c', true)
+            assert.match(err as string, /destination is inside the item itself/)
+        }
+        // Case-different spelling of the same subfolder: string comparison misses it on a
+        // case-insensitive volume, the dev+ino ancestor walk does not.
+        if (existsSync(join(dir, 'B', 'C'))) {
+            assert.match(await localCopy(vdir + '/b', vdir + '/B/C', true) as string, /inside the item itself/)
+        }
+        assert.deepEqual(binned, [], 'the destination lives INSIDE the source — it must not be binned')
+        assert.equal(readFileSync(join(dir, 'b', 'c', 'b', 'inner.txt')).toString(), 'y')
+        assert.equal(readFileSync(join(dir, 'b', 'keep.txt')).toString(), 'x')
+    })
+})
+
+test('containment is caught through a symlinked destination, which string paths cannot see', async (t) => {
+    await withTempDir(async (dir, vdir) => {
+        mkdirSync(join(dir, 'b', 'c'), { recursive: true })
+        writeFileSync(join(dir, 'b', 'keep.txt'), 'x')
+        try {
+            // 'junction' needs no elevation on Windows; the type is ignored on posix.
+            symlinkSync(join(dir, 'b'), join(dir, 'link'), 'junction')
+        } catch (e: any) {
+            if (e.code === 'EPERM') { t.skip('no permission to create links on this machine'); return }
+            throw e
+        }
+        // relative('<root>/b', '<root>/link/c/b') is '../link/c/b' — outside, as far as strings
+        // know. Only the dev+ino ancestor walk sees that <root>/link IS <root>/b.
+        binned.length = 0
+        assert.match(await localCopy(vdir + '/b', vdir + '/link/c', true) as string, /inside the item itself/)
+        assert.deepEqual(binned, [])
+        assert.equal(readFileSync(join(dir, 'b', 'keep.txt')).toString(), 'x')
     })
 })
 

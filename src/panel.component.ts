@@ -18,7 +18,7 @@ import { ChmodDialogComponent } from './chmod-dialog.component'
 import { CopyMoveDialogComponent } from './copy-move-dialog.component'
 import { LocalEditService } from './local-edit.service'
 import { toVirtualPath, toNativePath, isVirtualRoot, isDriveRoot, isWin } from './local-path'
-import { localCopy, localMove, localTrash, localExists, localSameEntry } from './local-ops'
+import { localCopy, localMove, localTrash, localExists, localRefusal } from './local-ops'
 
 type Col = 'name' | 'size' | 'modified' | 'owner' | 'group' | 'perms'
 // Thrown to unwind a cancelled recursive scan cleanly out of the (recursive) descendant walk.
@@ -1265,9 +1265,10 @@ export class SftpPanelComponent implements OnDestroy {
     // copy to fall back on if that turns out to be the wrong file. No "apply to all": the
     // human ruling on this scoped it to one prompt per collision, matching deleteSelected's
     // confirm-then-focusBody idiom rather than uploadFiles' resolveCollisions "all" options.
-    // "Overwrite" means REPLACE, for files and directories alike: local-ops removes the
-    // destination entry before the copy/move rather than merging into it (fs.cp merges and
-    // fs.rename cannot replace a non-empty directory at all).
+    // "Overwrite" means REPLACE, for files and directories alike: local-ops moves the destination
+    // entry TO THE RECYCLE BIN before the copy/move rather than merging into it (fs.cp merges and
+    // fs.rename cannot replace a non-empty directory at all). Consenting here is not consent to a
+    // permanent delete — the replaced item is recoverable, like anything else the panel removes.
     private async confirmLocalOverwrite (targetPath: string): Promise<'overwrite' | 'skip' | 'cancel'> {
         const keys = ['Overwrite', 'Skip', 'Cancel']
         const res = await this.platform.showMessageBox({
@@ -1292,10 +1293,11 @@ export class SftpPanelComponent implements OnDestroy {
             if (this.isLocal) {
                 const name = path.basename(t.fullPath)
                 let overwrite = false
-                // Identity first: an item whose destination IS itself (a case-different spelling
-                // of the folder it already sits in, on a case-insensitive volume) must be refused
-                // by localMove, not preceded by an overwrite prompt that can never be honoured.
-                if (!await localSameEntry(t.fullPath, dest) && await localExists(dest, name)) {
+                // Refusals first: an item whose destination is itself (a case-different spelling of
+                // the folder it already sits in, on a case-insensitive volume) or a folder moved
+                // into its own subfolder must be refused by localMove, not preceded by an overwrite
+                // prompt that can never be honoured.
+                if (!await localRefusal(t.fullPath, dest) && await localExists(dest, name)) {
                     const choice = await this.confirmLocalOverwrite(path.join(dest, name))
                     if (choice === 'cancel') { break }
                     if (choice === 'skip') { continue }
@@ -1331,7 +1333,7 @@ export class SftpPanelComponent implements OnDestroy {
                 const name = path.basename(t.fullPath)
                 let overwrite = false
                 // See applyServerMove: identity is checked before the collision prompt.
-                if (!await localSameEntry(t.fullPath, dest) && await localExists(dest, name)) {
+                if (!await localRefusal(t.fullPath, dest) && await localExists(dest, name)) {
                     const choice = await this.confirmLocalOverwrite(path.join(dest, name))
                     if (choice === 'cancel') { break }
                     if (choice === 'skip') { continue }
