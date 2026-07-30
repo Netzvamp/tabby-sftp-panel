@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs'
+import { mkdtempSync, writeFileSync, readFileSync, rmSync, symlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createRequire } from 'node:module'
@@ -107,5 +107,40 @@ test('download cancels the transfer and rethrows when the file is missing', asyn
         const transfer: any = { write: async () => {}, close: () => {}, cancel: () => { cancelled = true } }
         await assert.rejects(() => new LocalFsSession().download(vdir + '/nope', transfer))
         assert.equal(cancelled, true)
+    })
+})
+
+test('readlink resolves absolute and relative symlink targets', async (t) => {
+    await withTempDir(async (dir, vdir) => {
+        writeFileSync(join(dir, 'target.txt'), 'x')
+        try {
+            symlinkSync(join(dir, 'target.txt'), join(dir, 'abs-link'))
+            symlinkSync('target.txt', join(dir, 'rel-link'))
+        } catch (e: any) {
+            // Creating symlinks needs elevation or Developer Mode on Windows — skip rather
+            // than fail the suite on a machine that hasn't got that turned on.
+            if (e.code === 'EPERM') { t.skip('no permission to create symlinks on this machine'); return }
+            throw e
+        }
+        const s = new LocalFsSession()
+        assert.equal(await s.readlink(vdir + '/abs-link'), vdir + '/target.txt')
+        assert.equal(await s.readlink(vdir + '/rel-link'), 'target.txt')
+    })
+})
+
+test('open creates a new empty file', async () => {
+    await withTempDir(async (dir, vdir) => {
+        const s = new LocalFsSession()
+        const h = await s.open(vdir + '/new.txt', 0)
+        await h.close()
+        assert.equal(readFileSync(join(dir, 'new.txt')).length, 0)
+    })
+})
+
+test('open rejects when the target already exists', async () => {
+    await withTempDir(async (dir, vdir) => {
+        writeFileSync(join(dir, 'exists.txt'), 'hi')
+        const s = new LocalFsSession()
+        await assert.rejects(() => s.open(vdir + '/exists.txt', 0))
     })
 })

@@ -80,6 +80,15 @@ npm test           # tsx --test src/*.test.ts — 36 units (sftp-util 30 + logic
 npx tsc --noEmit -p tsconfig.json   # REQUIRED type-check — build does NOT type-check
 ```
 
+`src/package.json` (`{"type": "module"}`) scopes ESM module resolution to everything under
+`src/` — it exists only so `*.test.ts` files can use a top-level `await` (e.g. shimming
+`window.require` before a dynamic `import()` of the module under test); esbuild (via `tsx`)
+cannot emit top-level await when the resolved output format is CommonJS, which is what the
+untyped root `package.json` defaults to. The root `package.json` deliberately stays untyped:
+`webpack.config.js` uses `require`/`module.exports` and the built `dist/index.js` is UMD,
+loaded by Tabby via `require()` — flipping the root to ESM would break both. `files: ["dist"]`
+keeps `src/package.json` out of the published tarball (verify with `npm pack --dry-run`).
+
 **Build gate blind spot:** webpack uses `ts-loader { transpileOnly: true }` → no type
 check, no AOT template compile (Ivy runs JIT at runtime). A green `npm run build`
 catches **neither** type errors **nor** template/module-scope errors (a missing pipe or
