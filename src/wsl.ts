@@ -58,8 +58,10 @@ export function parseLxss (out: string): LxssInfo {
         const name = v.DistributionName
         if (!name) { continue }
         // REG_DWORD prints as hex ('0x3e8'). parseInt handles the 0x prefix at radix 16.
-        // Missing DefaultUid means the distro was never configured — 1000 is the WSL default.
-        uids[name] = v.DefaultUid === undefined ? 1000 : parseInt(v.DefaultUid, 16)
+        // Missing OR unparseable (e.g. an empty-body value line) DefaultUid means the
+        // distro was never configured — 1000 is the WSL default.
+        const uid = parseInt(v.DefaultUid ?? '', 16)
+        uids[name] = Number.isFinite(uid) ? uid : 1000
         if (defaultGuid && k.endsWith('\\' + defaultGuid)) { defaultDistro = name }
     }
     return { defaultDistro, uids }

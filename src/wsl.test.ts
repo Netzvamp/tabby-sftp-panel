@@ -11,7 +11,12 @@ import { createRequire } from 'node:module'
 const { wslDistroOf, parseLxss, homeFromPasswd, wslBase, wslHome } = await import('./wsl')
 
 // Captured verbatim from `reg.exe query HKCU\Software\Microsoft\Windows\CurrentVersion\Lxss /s`
-// on a real machine. Note the trailing empty value and the path value containing backslashes.
+// on a real machine. Note the trailing ShortcutPath line with an empty value (reg.exe prints
+// nothing after the type token) and the BasePath value containing backslashes. The empty
+// value is parsed without derailing the surrounding lines, but ShortcutPath itself is not part
+// of parseLxss's returned shape ({ defaultDistro, uids }), so its emptiness isn't observable
+// through that return value — see the dedicated DefaultUid test below for a field where an
+// empty body IS observable.
 const REG_OUT = `
 HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Lxss
     DefaultVersion    REG_DWORD    0x2
@@ -72,31 +77,34 @@ test('parseLxss survives a missing or unreadable key', () => {
         { defaultDistro: null, uids: {} })
 })
 
-test('parseLxss handles a value line with no body without derailing parsing', () => {
-    // reg.exe prints an empty REG_SZ with nothing after the type token — not even a
-    // trailing space. A block whose DistributionName line looks like that has no usable
-    // name and must not appear in uids, and the blocks before/after it must still parse.
+test('parseLxss falls back to 1000 when DefaultUid has an empty body, and does not corrupt the block after it', () => {
+    // reg.exe prints an empty REG_DWORD with nothing after the type token — not even a
+    // trailing space — for a distro whose uid was never configured that way. Unlike an
+    // empty DistributionName (unobservable: both undefined and '' are falsy), an empty
+    // DefaultUid IS observable through uids: parseInt('', 16) is NaN, and without a
+    // guard that NaN — not the 1000 fallback — is what a caller would see.
     const out = `
 HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Lxss
     DefaultDistribution    REG_SZ    {bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb}
 
 HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Lxss\\{aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa}
     State    REG_DWORD    0x1
-    DistributionName    REG_SZ
-    DefaultUid    REG_DWORD    0x0
+    DistributionName    REG_SZ    Debian
+    DefaultUid    REG_DWORD
 
 HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Lxss\\{bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb}
     State    REG_DWORD    0x1
     DistributionName    REG_SZ    Ubuntu
-    DefaultUid    REG_DWORD    0x3e8
+    DefaultUid    REG_DWORD    0x0
 `
     const info = parseLxss(out)
-    // The nameless block contributed nothing — only the named block after it shows up.
-    assert.deepEqual(Object.keys(info.uids), ['Ubuntu'])
-    // Parsing of the block AFTER the empty-value line was not derailed: its own
-    // DefaultUid is read correctly rather than being attributed to the wrong block.
-    assert.equal(info.uids.Ubuntu, 1000)
-    // The DefaultDistribution GUID (the block after the empty-name one) still resolves.
+    // The empty-body DefaultUid must fall back to 1000, not NaN.
+    assert.equal(info.uids.Debian, 1000)
+    // The block AFTER the empty-value line must still parse its own, DIFFERENT uid
+    // correctly (0, not 1000 and not NaN) — proof that the empty line above it did not
+    // leak into or corrupt this block's own DefaultUid line.
+    assert.equal(info.uids.Ubuntu, 0)
+    // The DefaultDistribution GUID (the block after the empty-DefaultUid one) still resolves.
     assert.equal(info.defaultDistro, 'Ubuntu')
 })
 
