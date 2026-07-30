@@ -219,6 +219,11 @@ export class LocalEditService {
     events.pipe(debounceTime(1000), debounce(async (ev: string) => {
       if (ev === 'rename') { watcher.close() }
       await this.save(edit)
+      // Atomic-save editors (vim, gedit, VS Code) replace the file instead of rewriting it, so
+      // this watcher now hangs off a dead inode. The path is live again — re-arm on it, or every
+      // later save is silently lost. Skip it when the file really is gone (moved away, deleted):
+      // reopen() handles that case by downloading afresh.
+      if (ev === 'rename' && fs.existsSync(edit.tempPath)) { this.startWatching(edit) }
     })).subscribe()
     watcher.on('close', () => {
       // 'close' fires on nextTick, after this function returns — so if a newer watcher was
