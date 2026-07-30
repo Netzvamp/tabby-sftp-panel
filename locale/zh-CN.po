@@ -340,3 +340,15 @@ msgstr "无法将 {name} 保存到服务器"
 
 msgid "Your changes are still in the local copy at {path}"
 msgstr "您的更改仍保留在本地副本 {path} 中"
+
+msgid "Reload from server"
+msgstr "从服务器重新加载"
+
+msgid "Keep the local copy"
+msgstr "保留本地副本"
+
+msgid "Reloading replaces the local copy and discards unsaved editor changes."
+msgstr "重新加载会替换本地副本，并丢弃编辑器中未保存的更改。"
+
+msgid "No open connection to {host}"
+msgstr "没有到 {host} 的可用连接"

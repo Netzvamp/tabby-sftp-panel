@@ -340,3 +340,15 @@ msgstr "Не удалось сохранить {name} на сервере"
 
 msgid "Your changes are still in the local copy at {path}"
 msgstr "Ваши изменения остались в локальной копии по пути {path}"
+
+msgid "Reload from server"
+msgstr "Загрузить с сервера заново"
+
+msgid "Keep the local copy"
+msgstr "Оставить локальную копию"
+
+msgid "Reloading replaces the local copy and discards unsaved editor changes."
+msgstr "Повторная загрузка заменит локальную копию и отменит несохранённые изменения в редакторе."
+
+msgid "No open connection to {host}"
+msgstr "Нет открытого подключения к {host}"

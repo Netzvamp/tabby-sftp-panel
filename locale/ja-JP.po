@@ -340,3 +340,15 @@ msgstr "{name} をサーバーに保存できませんでした"
 
 msgid "Your changes are still in the local copy at {path}"
 msgstr "変更内容はローカルコピー {path} に残っています"
+
+msgid "Reload from server"
+msgstr "サーバーから再読み込み"
+
+msgid "Keep the local copy"
+msgstr "ローカルのコピーを保持"
+
+msgid "Reloading replaces the local copy and discards unsaved editor changes."
+msgstr "再読み込みするとローカルのコピーが置き換えられ、エディターの未保存の変更は破棄されます。"
+
+msgid "No open connection to {host}"
+msgstr "{host} への接続が開いていません"

@@ -340,3 +340,15 @@ msgstr "Impossible d'enregistrer {name} sur le serveur"
 
 msgid "Your changes are still in the local copy at {path}"
 msgstr "Vos modifications sont toujours dans la copie locale située dans {path}"
+
+msgid "Reload from server"
+msgstr "Recharger depuis le serveur"
+
+msgid "Keep the local copy"
+msgstr "Conserver la copie locale"
+
+msgid "Reloading replaces the local copy and discards unsaved editor changes."
+msgstr "Le rechargement remplace la copie locale et abandonne les modifications non enregistrées de l'éditeur."
+
+msgid "No open connection to {host}"
+msgstr "Aucune connexion ouverte vers {host}"
