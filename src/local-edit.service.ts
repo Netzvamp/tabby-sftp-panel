@@ -253,23 +253,29 @@ export class LocalEditService {
     await opener(edit.tempPath)
   }
 
-  // Re-download into the SAME temp path, so an editor that already has the file open sees a
-  // change instead of losing it. The watcher is closed first and rebuilt afterwards: our own
-  // write would otherwise bounce straight back as an upload, and a download that replaces the
-  // file rather than truncating it would leave the old watcher on an unlinked inode.
+  // Re-download into a .part sibling to avoid corrupting the real temp file if the download
+  // fails. The watcher is closed first and rebuilt afterwards: our own write would otherwise
+  // bounce straight back as an upload, and a download that replaces the file rather than
+  // truncating it would leave the old watcher on an unlinked inode. startDownload opens the
+  // destination with 'w' mode, truncating it immediately, so if the download then fails, the
+  // file is already lost — we use the .part file to keep the original safe.
   private async reload (sftp: any, edit: OpenEdit, remote: any): Promise<void> {
     edit.watcher?.close()
     edit.watcher = null
     try {
-      const transfer = await (this.platform as any).startDownload(edit.name, remote.mode, remote.size, edit.tempPath)
+      const partPath = edit.tempPath + '.part'
+      const transfer = await (this.platform as any).startDownload(edit.name, remote.mode, remote.size, partPath)
       if (transfer) {
         await sftp.download(edit.remotePath, transfer)
+        fs.renameSync(partPath, edit.tempPath)
         edit.mode = remote.mode
         edit.mtime = +remote.modified
         fs.chmodSync(edit.tempPath, 0o700)
       }
     } catch (e: any) {
-      // Keep the local copy and the old baseline; the user still gets their editor.
+      // Clean up the part file if the download failed, leaving the original temp copy
+      // and baseline untouched — the user still has their local copy and their editor.
+      try { fs.rmSync(edit.tempPath + '.part', { force: true }) } catch { /* ignore */ }
       this.log.log('error', this.translate.instant('Could not open {name}', { name: edit.name }), describeSftpError(e))
     } finally {
       setTimeout(() => this.startWatching(edit), 1000)   // skip our own write burst
