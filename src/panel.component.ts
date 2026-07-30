@@ -18,6 +18,7 @@ import { ChmodDialogComponent } from './chmod-dialog.component'
 import { CopyMoveDialogComponent } from './copy-move-dialog.component'
 import { LocalEditService } from './local-edit.service'
 import { toVirtualPath } from './local-path'
+import { localCopy, localMove, localTrash } from './local-ops'
 
 type Col = 'name' | 'size' | 'modified' | 'owner' | 'group' | 'perms'
 // Thrown to unwind a cancelled recursive scan cleanly out of the (recursive) descendant walk.
@@ -1160,8 +1161,9 @@ export class SftpPanelComponent implements OnDestroy {
             .catch(() => this.log.log('warn', this.translate.instant('Copy failed')))
     }
 
-    // Copy or move the selected items to a destination dir on the SAME server session.
-    // Move = per-item sftp.rename(); copy = one `cp -r` over exec (SFTP has no server-side copy).
+    // Copy or move the selected items to a destination dir. SSH: move = per-item
+    // sftp.rename(), copy = one `cp -r` over exec (SFTP has no server-side copy).
+    // Local: fs.rename with an EXDEV fallback, and fs.cp(recursive) — see local-ops.ts.
     async copyMoveSelected (item: SFTPFile): Promise<void> {
         const selected = this.selectedItems()
         const targets = selected.some(i => i.fullPath === item.fullPath) && selected.length > 1
@@ -1187,6 +1189,11 @@ export class SftpPanelComponent implements OnDestroy {
     private async applyServerMove (targets: SFTPFile[], dest: string): Promise<void> {
         const failures: string[] = []
         for (const t of targets) {
+            if (this.isLocal) {
+                const err = await localMove(t.fullPath, dest)
+                if (err) { failures.push(`${t.fullPath}: ${err}`) }
+                continue
+            }
             const target = path.join(dest, path.basename(t.fullPath))
             try {
                 await this.sftp.rename(t.fullPath, target)
@@ -1203,6 +1210,19 @@ export class SftpPanelComponent implements OnDestroy {
     }
 
     private async applyServerCopy (targets: SFTPFile[], dest: string): Promise<void> {
+        if (this.isLocal) {
+            const failures: string[] = []
+            for (const t of targets) {
+                const err = await localCopy(t.fullPath, dest)
+                if (err) { failures.push(`${t.fullPath}: ${err}`) }
+            }
+            if (failures.length > 0) {
+                this.log.log('error', this.translate.instant('Copy failed'), failures.join('\n'))
+            } else {
+                this.log.log('info', this.translate.instant('Copied {n} item(s) to {dest}', { n: targets.length, dest }))
+            }
+            return
+        }
         // No timeout (0) — cp -r on a big tree can outlast the default 5s exec cap.
         const out = await this.exec(buildCpCommand(targets.map(t => t.fullPath), dest), 0)
         if (out === null) {
@@ -1643,9 +1663,16 @@ export class SftpPanelComponent implements OnDestroy {
             const entry = this.log.log('info', this.translate.instant('Deleting {name}…', { name: item.name }))
             let count = 0
             try {
-                await this.deleteRecursive(item, () => {
-                    if (++count % 10 === 0) { this.log.update(entry, this.translate.instant('Deleting {name}… ({count} items)', { name: item.name, count })) }
-                })
+                if (this.isLocal) {
+                    // The recycle bin takes a whole tree in one call — no walk needed.
+                    const err = await localTrash(item.fullPath)
+                    if (err) { throw new Error(err) }
+                    count = 1
+                } else {
+                    await this.deleteRecursive(item, () => {
+                        if (++count % 10 === 0) { this.log.update(entry, this.translate.instant('Deleting {name}… ({count} items)', { name: item.name, count })) }
+                    })
+                }
                 this.log.update(entry, count > 1
                     ? this.translate.instant('Deleted {name} ({count} items)', { name: item.name, count })
                     : this.translate.instant('Deleted {name}', { name: item.name }))
