@@ -17,6 +17,7 @@ import { LogService } from './log.service'
 import { ChmodDialogComponent } from './chmod-dialog.component'
 import { CopyMoveDialogComponent } from './copy-move-dialog.component'
 import { LocalEditService } from './local-edit.service'
+import { toVirtualPath } from './local-path'
 
 type Col = 'name' | 'size' | 'modified' | 'owner' | 'group' | 'perms'
 // Thrown to unwind a cancelled recursive scan cleanly out of the (recursive) descendant walk.
@@ -32,6 +33,10 @@ interface SSHSessionLike {
     // Public on tabby-ssh's SSHSession (`constructor(injector, public profile: SSHProfile)`)
     // but not in its exported typings — declared here for the local-edit host identity.
     profile?: { options: { host: string, port: number, user: string } }
+    // Set only by the mount service's local-tab wrapper: marks a filesystem-backed
+    // session and yields the terminal's current working directory (native path).
+    local?: boolean
+    getCwd?: () => Promise<string | null>
 }
 // The terminal-side SSHShellSession (tab.session): its `shell` is set once the
 // shell channel is open (session/shell.d.ts). Distinct from the connection
@@ -497,27 +502,31 @@ export class SftpPanelComponent implements OnDestroy {
         if (this.sftp || this.opening || !this.session) { return }
         this.opening = true
         try {
-            // Wait for the shell channel to come up before opening SFTP, so the
-            // server's MotD (sent on the shell channel) isn't clobbered by the two
-            // channel-opens racing. Wait even while shellSession is still null: on a
-            // multiplexed reconnect (new tab to an already-connected server) the
-            // connection is instant, so shellSession is wired a beat later — skipping
-            // the wait there races the shell channel and swallows the MotD. The field
-            // is updated live by the mount service.
-            // poll every 50ms, cap at 5s so a shell-less session still connects.
-            for (let i = 0; i < 100 && !this.shellSession?.shell; i++) {
-                await new Promise(r => setTimeout(r, 50))
+            if (!this.isLocal) {
+                // Wait for the shell channel to come up before opening SFTP, so the
+                // server's MotD (sent on the shell channel) isn't clobbered by the two
+                // channel-opens racing. Wait even while shellSession is still null: on a
+                // multiplexed reconnect (new tab to an already-connected server) the
+                // connection is instant, so shellSession is wired a beat later — skipping
+                // the wait there races the shell channel and swallows the MotD. The field
+                // is updated live by the mount service.
+                // poll every 50ms, cap at 5s so a shell-less session still connects.
+                for (let i = 0; i < 100 && !this.shellSession?.shell; i++) {
+                    await new Promise(r => setTimeout(r, 50))
+                }
+                // Shell channel is open, but the server streams the MotD a beat later.
+                // Opening SFTP inside that window makes the server swallow the MotD
+                // (worst on multiplexed connections, where the channel opens instantly
+                // and there's no auth latency to hide behind). No signal marks "MotD
+                // done" — it's raw shell bytes — so grace-wait before opening SFTP.
+                // 400ms covers a typical multi-line MotD; raise if a slow/
+                // chatty server still loses it, or drop once a real signal exists.
+                await new Promise(r => setTimeout(r, 400))
             }
-            // Shell channel is open, but the server streams the MotD a beat later.
-            // Opening SFTP inside that window makes the server swallow the MotD
-            // (worst on multiplexed connections, where the channel opens instantly
-            // and there's no auth latency to hide behind). No signal marks "MotD
-            // done" — it's raw shell bytes — so grace-wait before opening SFTP.
-            // 400ms covers a typical multi-line MotD; raise if a slow/
-            // chatty server still loses it, or drop once a real signal exists.
-            await new Promise(r => setTimeout(r, 400))
             this.sftp = await this.session.openSFTP()
-            this.localEdit.registerSession(this.sftp, this.session.profile)
+            // The local-edit registry is keyed by user@host:port and exists to route
+            // re-uploads to a live SSH session — meaningless for a local filesystem.
+            if (!this.isLocal) { this.localEdit.registerSession(this.sftp, this.session.profile) }
             // First open (path still ''): go to the configured start folder ('~' →
             // remote home via a one-shot `pwd` exec, since russh has no realpath).
             // Reconnect (path already set): restore that folder, don't re-resolve.
@@ -568,6 +577,12 @@ export class SftpPanelComponent implements OnDestroy {
     }
 
     private async resolveHome (): Promise<string | null> {
+        if (this.isLocal) {
+            // The terminal's cwd, taken once at open; falls back to the OS home. Native
+            // path in, virtual path out.
+            const cwd = await this.session?.getCwd?.().catch(() => null) ?? null
+            return toVirtualPath(cwd || (window as any).require('os').homedir())
+        }
         const out = await this.exec('pwd')
         if (out === null) { return null }
         const home = out.trim().split('\n').pop()?.trim() ?? ''
@@ -947,6 +962,10 @@ export class SftpPanelComponent implements OnDestroy {
         window.addEventListener('mousemove', move); window.addEventListener('mouseup', up)
     }
     goUp (): void { this.navigate(path.dirname(this.path)) }
+
+    /** True when this panel is backed by the local filesystem (a local terminal tab)
+     *  rather than SFTP. Drives the behaviour branches in local-ops and the template. */
+    get isLocal (): boolean { return this.session?.local === true }
 
     async open (item: SFTPFile): Promise<void> {
         if (item.isDirectory) { await this.navigate(item.fullPath); return }
