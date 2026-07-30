@@ -84,16 +84,31 @@ the temp path so the changes can be recovered. The save-time conflict check
 
 ### 5. Lifecycle end
 
-Cleanup (close watcher, `rmSync` the temp dir, drop the map entry) now runs when the *last*
-session for a host unregisters, not on the first `closed$`. The `beforeunload` wipe stays
-as is.
+Superseded by a later design decision: a handle going away — tab closed, connection lost,
+even the last session to a host unregistering — no longer tears anything down. `unregisterSession`
+only drops the handle from the session registry (`hostKeys` + `sessions`); the `OpenEdit`
+record, its temp file and its `fs.watch` watcher all keep living. The only thing that wipes
+temp copies is Tabby's `beforeunload`, unchanged from before.
+
+The tradeoff this buys: a save with no live handle for the file's server is no longer a dead
+end. It offers to reconnect — a message box, and on confirmation `ProfilesService
+.openNewTabForProfile(profile)` opens a real tab to that server (reusing Tabby's whole auth
+flow: passwords, key prompts, known-hosts), remembered per host from the `profile` argument
+`registerSession` already receives. The save then polls the session registry (every 500ms,
+up to 60s, to cover an interactive password/2FA prompt) for that new tab's panel to register
+its SFTP handle, and uploads once it does. Declining the prompt, or the handle never showing
+up, fails the save the same way a missing connection always did.
 
 ## Error handling
 
 - Missing profile → per-sftp fallback identity, feature degrades, no crash.
-- Reload download fails → keep the existing temp file and the old baseline, log an error,
-  still run the opener.
-- No live session at save time → existing error modal with the temp path.
+- Reload download fails → the transfer went to a `<tempPath>.part` sibling, not the live temp
+  file, so a failed download deletes only the `.part` file; the existing temp file and its
+  baseline are untouched. Log an error, still run the opener. The rename to `tempPath` (and
+  the mtime/mode baseline update) only happens after the download succeeds.
+- No live session at save time → offer to reconnect (see section 5). Declining, or the new
+  tab's handle never registering within the poll window, falls through to the existing
+  failure modal naming the temp path.
 - `freshMeta` returning null (unreadable parent dir, symlink) keeps its current meaning:
   baseline 0 disables the conflict check.
 

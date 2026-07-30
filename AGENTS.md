@@ -38,7 +38,8 @@ src/
   local-edit.service.ts  LocalEditService (providedIn:root) — "edit locally": download→temp, spawn
                       editor (configured exe or OS default), fs.watch → debounced re-upload + chmod;
                       one temp copy per server+path (reopen reuses it, offers reload when the remote
-                      moved), session registry so a save survives the opening tab closing;
+                      moved); edits outlive their session (temp copies die only on window unload); a
+                      save with no live handle offers to reopen a tab to that server;
                       Windows .txt-handler auto-detect (UserChoice registry) for settings prefill
   toolbar.ts          SftpPanelHotkeyProvider (declares toggle-sftp-panel) + SftpPanelBootstrap
                       (no visible button; bootstraps mount service + i18n + wires hotkey → focusPanel)
@@ -47,7 +48,7 @@ src/
                       .localeChanged$. Only ships strings Tabby lacks; shared labels reuse Tabby's.
 ../locale/*.po      our gettext catalogs — at the REPO ROOT, not under src/ (de-DE, zh-CN,
                       ru-RU, es-ES, fr-FR, ja-JP, pt-BR).
-                      gap strings only, 109 msgid each, identical key sets. built via json-loader +
+                      gap strings only, 115 msgid each, identical key sets. built via json-loader +
                       po-gettext-loader (webpack .po rule) — same chain Tabby uses. i18n.service
                       picks up new langs automatically (dynamic require → webpack context).
   settings.ts         settings tab for sftpPanel
@@ -237,11 +238,12 @@ Shipping. Published on npm (`tabby-sftp-panel`), listed in Tabby's plugin manage
 - chmod/chown dialog, copy/move to a destination on the server, and "edit locally" with a
   configurable editor (or OS default) + auto re-upload on save.
 - Edited files are tracked in `LocalEditService.openEdits`, keyed by server (`user@host:port`)
-  plus remote path: re-opening a checked-out file reuses its temp copy instead of downloading a
-  second one, and offers a reload when the remote copy moved since our last transfer. A save
-  resolves its SFTP handle from a live-session registry, so closing the tab that opened the file
-  does not orphan it — the temp copy is dropped only when the last session to that server goes.
-  Temp copies are wiped on window unload, a re-upload whose remote mtime moved since the last
-  transfer prompts before overwriting, and a failed re-upload raises a modal naming the temp path.
-  Still open in issue #5: no polling (detection happens on save and on re-open), and no
-  "keep both" conflict option.
+  plus remote path: temp copies are dropped only when Tabby's window unloads — the record, the
+  temp file and the watcher all survive a tab closing or the connection dropping. A save resolves
+  its SFTP handle from a live-session registry; when none is live it offers to open a new tab to
+  that server and then uploads once the handle registers. Re-opening a checked-out file reuses its
+  temp copy instead of downloading a second one, and offers a reload when the remote copy moved
+  since our last transfer. A re-upload whose remote mtime moved since the last transfer prompts
+  before overwriting, and a failed re-upload still raises a modal naming the temp path. Still open
+  in issue #5: no polling (detection happens on save and on re-open), and no "keep both" conflict
+  option.
