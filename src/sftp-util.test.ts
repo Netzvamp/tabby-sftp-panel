@@ -261,6 +261,7 @@ test('parseNames: names from getent/passwd, dedupe+sort, skip blanks/comments', 
 })
 
 import { shQuote, buildCpCommand } from './sftp-util'
+import { hostKey, editKey, SessionRegistry } from './sftp-util'
 test('shQuote: plain, spaces, embedded single quote', () => {
   assert.equal(shQuote('/a/b'), "'/a/b'")
   assert.equal(shQuote('with space'), "'with space'")
@@ -269,4 +270,30 @@ test('shQuote: plain, spaces, embedded single quote', () => {
 test('buildCpCommand: quotes each src + dest, appends 2>&1', () => {
   assert.equal(buildCpCommand(['/a', '/b'], '/dest'), "cp -r -- '/a' '/b' '/dest' 2>&1")
   assert.equal(buildCpCommand(["/x'y"], '/d'), "cp -r -- '/x'\\''y' '/d' 2>&1")
+})
+
+test('hostKey builds user@host:port and degrades to empty without a profile', () => {
+  assert.equal(hostKey({ options: { user: 'root', host: 'example.com', port: 2222 } }), 'root@example.com:2222')
+  assert.equal(hostKey({ options: { host: 'example.com' } }), '@example.com:22')
+  assert.equal(hostKey(undefined), '')
+  assert.equal(hostKey({ options: {} }), '')
+})
+
+test('editKey separates host from path with NUL so keys cannot collide', () => {
+  assert.equal(editKey('root@h:22', '/etc/hosts'), 'root@h:22\0/etc/hosts')
+  assert.notEqual(editKey('a', 'b/c'), editKey('a/b', 'c'))
+})
+
+test('SessionRegistry hands out any live session and reports the last one leaving', () => {
+  const r = new SessionRegistry()
+  const a = { id: 'a' }, b = { id: 'b' }
+  assert.equal(r.any('h'), null)
+  r.add('h', a)
+  r.add('h', b)
+  assert.ok([a, b].includes(r.any('h')))
+  assert.equal(r.remove('h', a), false)   // b still holds the host
+  assert.equal(r.any('h'), b)
+  assert.equal(r.remove('h', b), true)    // last one out
+  assert.equal(r.any('h'), null)
+  assert.equal(r.remove('h', b), false)   // removing twice is not a "last one out" again
 })

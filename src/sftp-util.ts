@@ -311,3 +311,43 @@ export function shQuote (s: string): string { return "'" + s.replace(/'/g, "'\\'
 export function buildCpCommand (srcs: string[], dest: string): string {
     return 'cp -r -- ' + srcs.map(shQuote).join(' ') + ' ' + shQuote(dest) + ' 2>&1'
 }
+
+/** Server identity for local-edit dedup: same user+host+port means the same file.
+ *  Returns '' when the profile is unavailable — the caller then falls back to a
+ *  per-handle id, so dedup degrades to per-session instead of merging servers. */
+export function hostKey (profile: any): string {
+    const o = profile?.options
+    if (!o?.host) { return '' }
+    return `${o.user ?? ''}@${o.host}:${o.port ?? 22}`
+}
+
+/** Map key for one checked-out file. NUL separates the two halves, so no host/path
+ *  split can produce the same string as a different one. */
+export function editKey (host: string, remotePath: string): string {
+    return host + '\0' + remotePath
+}
+
+/** Live SFTP handles per server key. A save resolves its handle through this instead of
+ *  capturing one, so it still works after the tab that opened the file is gone. */
+export class SessionRegistry {
+    private byHost = new Map<string, Set<any>>()
+
+    add (key: string, session: any): void {
+        const set = this.byHost.get(key) ?? new Set<any>()
+        set.add(session)
+        this.byHost.set(key, set)
+    }
+
+    /** Drops one session; true when that server has no sessions left at all. */
+    remove (key: string, session: any): boolean {
+        const set = this.byHost.get(key)
+        if (!set?.delete(session)) { return false }
+        if (set.size) { return false }
+        this.byHost.delete(key)
+        return true
+    }
+
+    any (key: string): any | null {
+        return this.byHost.get(key)?.values().next().value ?? null
+    }
+}
