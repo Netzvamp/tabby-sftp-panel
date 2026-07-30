@@ -17,8 +17,9 @@ import { LogService } from './log.service'
 import { ChmodDialogComponent } from './chmod-dialog.component'
 import { CopyMoveDialogComponent } from './copy-move-dialog.component'
 import { LocalEditService } from './local-edit.service'
-import { toVirtualPath, toNativePath, isVirtualRoot, isDriveRoot, isWin } from './local-path'
+import { toVirtualPath, toNativePath, toNativeFsPath, isVirtualRoot, isDriveRoot, isWin } from './local-path'
 import { localCopy, localMove, localTrash, localExists, localRefusal } from './local-ops'
+import { wslHome } from './wsl'
 
 type Col = 'name' | 'size' | 'modified' | 'owner' | 'group' | 'perms'
 // Thrown to unwind a cancelled recursive scan cleanly out of the (recursive) descendant walk.
@@ -547,7 +548,14 @@ export class SftpPanelComponent implements OnDestroy {
                 target = resolveStartPath(start, home)
             }
             await this.navigate(target)
-            // Folder gone after a reconnect (or start dir invalid) → fall back to '/'.
+            // Folder gone after a reconnect (or start dir invalid) → fall back. On a based
+            // session the configured startDirectory is very often a Windows path that cannot
+            // exist in the distribution, so fall back to the distro home before '/', which is
+            // a far less useful place to land than it is on a drive.
+            if (!this.fileList && this.localBase) {
+                const home = await this.resolveHome()
+                if (home) { await this.navigate(home) }
+            }
             if (!this.fileList) { await this.navigate('/') }
         } catch (e) {
             this.log.log('error', this.translate.instant('Could not open SFTP'), String(e))
@@ -588,6 +596,12 @@ export class SftpPanelComponent implements OnDestroy {
 
     private async resolveHome (): Promise<string | null> {
         if (this.isLocal) {
+            if (this.localBase) {
+                // The terminal cwd is useless here: wsl.exe is a WINDOWS process whose cwd is
+                // a Windows path, not a path inside the distribution. Resolve the distro home
+                // from its own /etc/passwd instead, keyed by the uid WSL was configured with.
+                return wslHome(this.localBase, (this.session as any)?.uid ?? 1000)
+            }
             // The terminal's cwd, taken once at open; falls back to the OS home. Native
             // path in, virtual path out.
             const cwd = await this.session?.getCwd?.().catch(() => null) ?? null
@@ -981,18 +995,28 @@ export class SftpPanelComponent implements OnDestroy {
      *  rather than SFTP. Drives the behaviour branches in local-ops and the template. */
     get isLocal (): boolean { return this.session?.local === true }
 
+    /** The native prefix this local session is rooted at — a WSL distro share
+     *  (`\\wsl$\Ubuntu`) — or '' for an ordinary local tab browsing the Windows drives.
+     *  Set by the mount service before openSFTP() resolves. */
+    get localBase (): string { return (this.session as any)?.base ?? '' }
+
     /** The synthetic win32 root, whose listing is the drive list. It is not a directory: it
      *  can be listed and navigated, and nothing else — creating an entry "in" it would
-     *  resolve relative to Tabby's own working directory. */
-    atVirtualRoot (): boolean { return this.isLocal && isVirtualRoot(this.path) }
+     *  resolve relative to Tabby's own working directory. A based session has no such root:
+     *  its '/' is a real directory inside the distribution. */
+    atVirtualRoot (): boolean { return this.isLocal && !this.localBase && isVirtualRoot(this.path) }
 
     /** A drive-root row ('/C:'). Navigable only: its basename is empty, so copy/move/delete
-     *  would act on the entire drive (verified: win32 basename('C:\\') === ''). */
-    private isDriveRow (item: SFTPFile): boolean { return this.isLocal && isDriveRoot(item.fullPath) }
+     *  would act on the entire drive (verified: win32 basename('C:\\') === ''). A based
+     *  session has no drives. */
+    private isDriveRow (item: SFTPFile): boolean { return this.isLocal && !this.localBase && isDriveRoot(item.fullPath) }
 
     /** Paths shown to the user: a virtual path is meaningless outside this panel, so local
-     *  tabs get the native one (same rule as "Copy path"). */
-    private displayPath (p: string): string { return this.isLocal ? toNativePath(p) : p }
+     *  tabs get the native one (same rule as "Copy path"). A BASED session is the exception —
+     *  its virtual paths already are the distribution's own posix paths, which is exactly what
+     *  the user wants to see and to paste into the shell beside the panel. The native form
+     *  there is a \\wsl$ UNC path that means nothing inside the distro. */
+    private displayPath (p: string): string { return this.isLocal && !this.localBase ? toNativePath(p) : p }
 
     async open (item: SFTPFile): Promise<void> {
         if (item.isDirectory) { await this.navigate(item.fullPath); return }
@@ -1030,7 +1054,7 @@ export class SftpPanelComponent implements OnDestroy {
             if (this.isLocal) {
                 // The file is already local: spawn the editor on it directly. No temp copy,
                 // no fs.watch, no re-upload, no conflict handling.
-                await opener(toNativePath(item.fullPath))
+                await opener(toNativeFsPath(item.fullPath, this.localBase))
             } else {
                 await this.localEdit.edit(this.sftp, item, mode, size, opener)
             }
@@ -1043,7 +1067,7 @@ export class SftpPanelComponent implements OnDestroy {
     async openWithDefault (item: SFTPFile, mode: number, size: number): Promise<void> {
         try {
             if (this.isLocal) {
-                await this.localEdit.defaultOpener(toNativePath(item.fullPath))
+                await this.localEdit.defaultOpener(toNativeFsPath(item.fullPath, this.localBase))
             } else {
                 await this.localEdit.edit(this.sftp, item, mode, size, this.localEdit.defaultOpener)
             }
@@ -1223,7 +1247,7 @@ export class SftpPanelComponent implements OnDestroy {
         const targets = selected.some(i => i.fullPath === item.fullPath) && selected.length > 1 ? selected : [item]
         // On a local tab the virtual path (e.g. /C:/Users/x/y.txt on Windows) is unusable
         // anywhere the user would paste it — copy the native OS path instead.
-        const paths = this.isLocal ? targets.map(i => toNativePath(i.fullPath)) : targets.map(i => i.fullPath)
+        const paths = targets.map(i => this.displayPath(i.fullPath))
         navigator.clipboard.writeText(paths.join('\n'))
             .catch(() => this.log.log('warn', this.translate.instant('Copy failed')))
     }
@@ -1265,16 +1289,20 @@ export class SftpPanelComponent implements OnDestroy {
     // copy to fall back on if that turns out to be the wrong file. No "apply to all": the
     // human ruling on this scoped it to one prompt per collision, matching deleteSelected's
     // confirm-then-focusBody idiom rather than uploadFiles' resolveCollisions "all" options.
-    // "Overwrite" means REPLACE, for files and directories alike: local-ops moves the destination
-    // entry TO THE RECYCLE BIN before the copy/move rather than merging into it (fs.cp merges and
-    // fs.rename cannot replace a non-empty directory at all). Consenting here is not consent to a
-    // permanent delete — the replaced item is recoverable, like anything else the panel removes.
+    // "Overwrite" means REPLACE, for files and directories alike: local-ops removes the
+    // destination entry before the copy/move rather than merging into it (fs.cp merges and
+    // fs.rename cannot replace a non-empty directory at all). On an ordinary local tab that
+    // removal goes to the RECYCLE BIN, so consenting here is not consent to a permanent
+    // delete. On a WSL share there is no bin and it is permanent — which is why the message
+    // below says so before the user consents rather than after.
     private async confirmLocalOverwrite (targetPath: string): Promise<'overwrite' | 'skip' | 'cancel'> {
         const keys = ['Overwrite', 'Skip', 'Cancel']
         const res = await this.platform.showMessageBox({
             type: 'warning',
-            // Native path: the virtual one means nothing outside the panel.
-            message: this.translate.instant('{target} already exists.', { target: this.displayPath(targetPath) }),
+            // Native path, except on a based session where the virtual path IS the real one.
+            message: this.localBase
+                ? this.translate.instant('{target} already exists. Overwriting deletes it permanently.', { target: this.displayPath(targetPath) })
+                : this.translate.instant('{target} already exists.', { target: this.displayPath(targetPath) }),
             buttons: keys.map(k => this.translate.instant(k)), defaultId: keys.indexOf('Cancel'), cancelId: keys.indexOf('Cancel'),
         })
         // Native dialog steals focus; hand it back to the list either way.
@@ -1297,13 +1325,13 @@ export class SftpPanelComponent implements OnDestroy {
                 // the folder it already sits in, on a case-insensitive volume) or a folder moved
                 // into its own subfolder must be refused by localMove, not preceded by an overwrite
                 // prompt that can never be honoured.
-                if (!await localRefusal(t.fullPath, dest) && await localExists(dest, name)) {
+                if (!await localRefusal(t.fullPath, dest, this.localBase) && await localExists(dest, name, this.localBase)) {
                     const choice = await this.confirmLocalOverwrite(path.join(dest, name))
                     if (choice === 'cancel') { break }
                     if (choice === 'skip') { continue }
                     overwrite = true
                 }
-                const err = await localMove(t.fullPath, dest, overwrite)
+                const err = await localMove(t.fullPath, dest, overwrite, this.localBase)
                 if (err) { failures.push(`${this.displayPath(t.fullPath)}: ${err}`) } else { moved++ }
                 continue
             }
@@ -1333,13 +1361,13 @@ export class SftpPanelComponent implements OnDestroy {
                 const name = path.basename(t.fullPath)
                 let overwrite = false
                 // See applyServerMove: identity is checked before the collision prompt.
-                if (!await localRefusal(t.fullPath, dest) && await localExists(dest, name)) {
+                if (!await localRefusal(t.fullPath, dest, this.localBase) && await localExists(dest, name, this.localBase)) {
                     const choice = await this.confirmLocalOverwrite(path.join(dest, name))
                     if (choice === 'cancel') { break }
                     if (choice === 'skip') { continue }
                     overwrite = true
                 }
-                const err = await localCopy(t.fullPath, dest, overwrite)
+                const err = await localCopy(t.fullPath, dest, overwrite, this.localBase)
                 if (err) { failures.push(`${this.displayPath(t.fullPath)}: ${err}`) } else { copied++ }
             }
             if (failures.length > 0) {
@@ -1595,7 +1623,9 @@ export class SftpPanelComponent implements OnDestroy {
             const res = await this.platform.showMessageBox({
                 type: 'warning',
                 message: this.isLocal
-                    ? this.translate.instant('{target} already exists.', { target: toNativePath(target) })
+                    ? (this.localBase
+                        ? this.translate.instant('{target} already exists. Overwriting deletes it permanently.', { target })
+                        : this.translate.instant('{target} already exists.', { target: toNativePath(target) }))
                     : this.translate.instant('{target} already exists on the server.', { target }),
                 buttons, defaultId: 0, cancelId: keys.indexOf('Skip'),
             })
@@ -1788,7 +1818,13 @@ export class SftpPanelComponent implements OnDestroy {
         // Shift+Delete bypasses the confirmation dialog.
         if (!skipConfirm) {
             const ok = await this.platform.showMessageBox({
-                type: 'warning', message: this.translate.instant('Delete {n} item(s)?', { n: items.length }),
+                type: 'warning',
+                // A WSL share has no recycle bin, so this really is gone. Say it before, not
+                // after — an ordinary local tab still routes through the bin and must not
+                // frighten the user with wording that does not apply to it.
+                message: this.localBase
+                    ? this.translate.instant('Delete {n} item(s) permanently? A WSL share has no recycle bin.', { n: items.length })
+                    : this.translate.instant('Delete {n} item(s)?', { n: items.length }),
                 buttons: [this.translate.instant('Delete'), this.translate.instant('Cancel')], defaultId: 1, cancelId: 1,
             })
             // Native dialog steals focus; hand it back to the list either way.
@@ -1802,7 +1838,7 @@ export class SftpPanelComponent implements OnDestroy {
             try {
                 if (this.isLocal) {
                     // The recycle bin takes a whole tree in one call — no walk needed.
-                    const err = await localTrash(item.fullPath)
+                    const err = await localTrash(item.fullPath, this.localBase)
                     if (err) { throw new Error(err) }
                     count = 1
                 } else {
