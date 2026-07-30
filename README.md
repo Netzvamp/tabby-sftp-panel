@@ -33,6 +33,10 @@ SFTP panel rather than replacing it.
   editor (or the OS default), and auto re-upload on save.
 - **Drag-out** — drag files and folders straight out of the panel to your
   desktop or file manager.
+- **Local tabs, too** — the panel also appears on local terminal tabs, browsing the
+  local filesystem starting in the shell's working directory. Remote-only actions
+  (upload/download, server-side copy/move) stay hidden and deletes go to the recycle
+  bin; turn it off with the "Show the panel on local terminal tabs" setting.
 - **i18n** — ships German plus 6 additional languages (zh-CN, ru-RU, es-ES,
   fr-FR, ja-JP, pt-BR), merged on top of Tabby's own catalog.
 

@@ -358,3 +358,19 @@ msgstr "Se reconnecter et enregistrer"
 
 msgid "Open a new tab to save {name}?"
 msgstr "Ouvrir un nouvel onglet pour enregistrer {name} ?"
+
+# --- Local tabs ---
+msgid "Files"
+msgstr "Fichiers"
+
+msgid "Files — hover to open"
+msgstr "Fichiers — survolez pour ouvrir"
+
+msgid "Show the panel on local terminal tabs"
+msgstr "Afficher le panneau dans les onglets de terminal local"
+
+msgid "Adds the file browser to local shells, backed by the local filesystem."
+msgstr "Ajoute le navigateur de fichiers aux shells locaux, basé sur le système de fichiers local."
+
+msgid "{target} already exists."
+msgstr "{target} existe déjà."

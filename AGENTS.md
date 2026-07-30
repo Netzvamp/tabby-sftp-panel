@@ -8,15 +8,17 @@
 ## What this is
 
 `tabby-sftp-panel` — a **standalone** SFTP panel plugin for [Tabby](https://github.com/Eugeny/tabby)
-(Electron terminal). It mounts its own Angular 15 component into each SSH tab and
-reuses Tabby's services via DI. It does **not** patch Tabby's built-in SFTP panel —
-the two coexist, which is what makes it publishable.
+(Electron terminal). It mounts its own Angular 15 component into each SSH tab — and,
+backed by the local filesystem instead of SFTP, each local terminal tab — and reuses
+Tabby's services via DI. It does **not** patch Tabby's built-in SFTP panel — the two
+coexist, which is what makes it publishable.
 
 Config key: `sftpPanel`. **No titlebar button** — the panel is a permanent
-collapsed edge strip (24px) on every SSH pane that expands on hover. `pinned` = docked
-(reserves width, terminal shrinks); unpinned = strip that overlays the terminal on hover.
-Hotkey `toggle-sftp-panel` ("Focus SFTP Panel") reveals + focuses the active pane's panel;
-Esc collapses a hover-opened one.
+collapsed edge strip (24px) on every SSH pane, and (gated on `localTabs`, on by default)
+every local terminal pane too, that expands on hover. `pinned` = docked (reserves width,
+terminal shrinks); unpinned = strip that overlays the terminal on hover. Hotkey
+`toggle-sftp-panel` ("Focus SFTP Panel") reveals + focuses the active pane's panel; Esc
+collapses a hover-opened one.
 
 ## Layout
 
@@ -27,11 +29,14 @@ src/
                       CommonModule/FormsModule/NgbModule/TabbyCoreModule
   config.ts           sftpPanel defaults — side, pinned, width, startDirectory, showHidden,
                       fileClickAction, editorEnabled/editorPath/editorMaxSizeMB, sort, columns,
-                      columnOrder, transfersVisible/transfersHeight/transfersAutoShow
+                      columnOrder, transfersVisible/transfersHeight/transfersAutoShow, localTabs
+                      (also mount the panel on local terminal tabs; on by default)
   panel.component.ts  SftpPanelComponent — the panel UI (inline template+styles). The big one.
-  mount.service.ts    PanelMountService — dynamic createComponent() into each SSH pane's DOM;
-                      collapsed 24px edge strip + hover-expand, pin/dock vs overlay, Esc-collapse,
-                      per-pane in split tabs, startup-restored splits (initialized$), teardown
+  mount.service.ts    PanelMountService — dynamic createComponent() into each SSH pane's DOM,
+                      and each local terminal pane's (`tab.profile?.type === 'local'`, gated on
+                      config `localTabs`); collapsed 24px edge strip + hover-expand, pin/dock vs
+                      overlay, Esc-collapse, per-pane in split tabs, startup-restored splits
+                      (initialized$), teardown
   log.service.ts      LogService (providedIn:root) — unified panel log: file transfers (Tabby's
                       platform stream) + messages (chmod/copy/move failures, notices); render-lag
                       fix, folder-upload aggregation, Stop-button cancel, hides Tabby's popup
@@ -48,19 +53,30 @@ src/
                       .localeChanged$. Only ships strings Tabby lacks; shared labels reuse Tabby's.
 ../locale/*.po      our gettext catalogs — at the REPO ROOT, not under src/ (de-DE, zh-CN,
                       ru-RU, es-ES, fr-FR, ja-JP, pt-BR).
-                      gap strings only, 115 msgid each, identical key sets. built via json-loader +
+                      gap strings only, 120 msgid each, identical key sets. built via json-loader +
                       po-gettext-loader (webpack .po rule) — same chain Tabby uses. i18n.service
                       picks up new langs automatically (dynamic require → webpack context).
   settings.ts         settings tab for sftpPanel
   chmod-dialog.component.ts     ChmodDialogComponent — permissions (rwx grid) + owner/group modal
   copy-move-dialog.component.ts CopyMoveDialogComponent — destination input + Copy/Move buttons
+  local-path.ts       virtual posix ↔ native path conversion (`/C:/Users/x` ↔ `C:\Users\x`),
+                      drive-root enumeration; pure, `window`-free so `node:test` can import it
+  local-fs.session.ts `LocalFsSession`, duck-types `SFTPSession` over node `fs` so the panel
+                      browses a local tab with no call-site changes; streams `upload`/`download`
+                      through the same transfer interface
+  local-ops.ts        `localCopy`/`localMove`/`localTrash`/`localExists` — the ops a local tab
+                      does differently: `fs.cp` copy, rename-with-EXDEV-fallback move,
+                      recycle-bin delete via Electron `shell.trashItem`, and an existence check
+                      the panel uses to gate a same-name overwrite behind a confirm prompt
   sftp-util.ts        pure helpers — file type/icon/mode, sort/filter, sizes/times, perms
                       (octalToPerms/permsToOctal), owners (parseLsOwners/parseNames), log
                       (LogEntry/logFullText/computeLogSelection), start-path (resolveStartPath),
                       columns (moveColumn), editor (parseFtypeExe/isBigFile), server-side cp/mv
-                      (shQuote/buildCpCommand/expandDirs)
+                      (shQuote/buildCpCommand/expandDirs), local-tab column/sort gating
+                      (filterLocalCols/effectiveSortColumn)
   logic.ts            dock math (clampSize/dockSize) — clampSize reused for transfer-list height
-  *.test.ts           node:test units for sftp-util (30) + logic (4) + i18n (2) = 36
+  *.test.ts           node:test units for sftp-util (32) + logic (4) + i18n (2) + local-path (7)
+                      + local-fs.session (9) + local-ops (7) = 61
                       i18n.test.ts guards the catalogs: identical msgid sets, no empty msgstr
 docs/superpowers/      specs + plans (design of record)
 _tabby-ref/            full Tabby source, READ-ONLY reference. NOT ours. Ignore in globs.
@@ -76,7 +92,8 @@ loads the built file, not the source.
 ```
 npm run build      # webpack → dist/index.js
 npm run watch      # rebuild on change
-npm test           # tsx --test src/*.test.ts — 36 units (sftp-util 30 + logic 4 + i18n 2)
+npm test           # tsx --test src/*.test.ts — 61 units (sftp-util 32 + logic 4 + i18n 2 +
+                    # local-path 7 + local-fs.session 9 + local-ops 7)
 npx tsc --noEmit -p tsconfig.json   # REQUIRED type-check — build does NOT type-check
 ```
 
@@ -231,6 +248,26 @@ publishing now needs a passkey/WebAuthn; that's the fallback if CI is ever broke
   panel renders a single aggregate row (`dropTransfers` the children without cancelling +
   `addTransfer` the aggregate). `swapTransfer` repoints a row to a cancellable proxy so the
   log-line Stop button actually aborts an in-flight transfer.
+- **Local tabs and path flavour.** The panel imports `posix as path`, and `posix.resolve('C:/a/b',
+  '..')` does not recognise `C:/` as a root — it prepends `process.cwd()` and returns garbage. So
+  `LocalFsSession` presents *virtual* posix paths (`/C:/Users/x`) and converts to native only at
+  the fs boundary; `/` is a synthetic root whose listing is the drive list (probe `A:\`…`Z:\` with
+  `existsSync` — no `wmic`). A local pane is detected by `tab.profile?.type === 'local'` and handed
+  a **stable** wrapper object (cached per pane in a `WeakMap`): `setSession()` treats a different
+  object as a reconnect and drops the open handle, so a fresh wrapper per focus change would reopen
+  the listing every time. Local sessions have no `shell` field, so `openIfReady`'s shell-channel
+  wait must be skipped or it burns its full 5s cap before the panel works. Everything reached
+  through `exec()` (home resolve, `ls -l` owners, root detect, chown) degrades on its own —
+  `exec()` returns `null` without an `ssh` object. **Local overwrite confirm is one-sided:** before
+  a local-tab copy/move overwrites a same-named destination, `local-ops.ts`'s `localExists()` gates
+  a confirm prompt (overwrite / skip / cancel, asked once per colliding item — no "apply to all",
+  see `confirmLocalOverwrite` in panel.component.ts); the SSH path (`sftp.rename`, server-side cp/mv)
+  deliberately still overwrites silently, as it always has — don't "fix" that asymmetry without
+  checking the deferred-decisions note first. **Column/sort gating is view-only:** `filterLocalCols`
+  and `effectiveSortColumn` in `sftp-util.ts` are the single source of truth for which columns a
+  local tab shows (owner/group hidden everywhere, permissions posix-only) and which column it
+  actually sorts by; the sort coercion (owner/group → name) happens at the view layer and is never
+  written back to config, so an SSH tab elsewhere keeps its own owner/group sort untouched.
 
 ## Status
 
@@ -256,3 +293,7 @@ Shipping. Published on npm (`tabby-sftp-panel`), listed in Tabby's plugin manage
   before overwriting, and a failed re-upload still raises a modal naming the temp path. Still open
   in issue #5: no polling (detection happens on save and on re-open), and no "keep both" conflict
   option.
+- The panel also runs on local terminal tabs as a plain file explorer (`localTabs`, on by
+  default), backed by the local filesystem; upload/download affordances and the owner/group
+  columns are hidden there, chmod is posix-only, delete goes to the recycle bin, and "edit
+  locally" becomes a direct editor spawn with no temp copy.

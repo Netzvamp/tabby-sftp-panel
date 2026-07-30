@@ -358,3 +358,19 @@ msgstr "Переподключиться и сохранить"
 
 msgid "Open a new tab to save {name}?"
 msgstr "Открыть новую вкладку, чтобы сохранить {name}?"
+
+# --- Local tabs ---
+msgid "Files"
+msgstr "Файлы"
+
+msgid "Files — hover to open"
+msgstr "Файлы — наведите, чтобы открыть"
+
+msgid "Show the panel on local terminal tabs"
+msgstr "Показывать панель в локальных вкладках терминала"
+
+msgid "Adds the file browser to local shells, backed by the local filesystem."
+msgstr "Добавляет файловый браузер в локальные оболочки на основе локальной файловой системы."
+
+msgid "{target} already exists."
+msgstr "{target} уже существует."

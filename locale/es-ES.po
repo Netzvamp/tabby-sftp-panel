@@ -358,3 +358,19 @@ msgstr "Reconectar y guardar"
 
 msgid "Open a new tab to save {name}?"
 msgstr "¿Abrir una pestaña nueva para guardar {name}?"
+
+# --- Local tabs ---
+msgid "Files"
+msgstr "Archivos"
+
+msgid "Files — hover to open"
+msgstr "Archivos — pase el cursor para abrir"
+
+msgid "Show the panel on local terminal tabs"
+msgstr "Mostrar el panel en las pestañas de terminal local"
+
+msgid "Adds the file browser to local shells, backed by the local filesystem."
+msgstr "Añade el explorador de archivos a las shells locales, basado en el sistema de archivos local."
+
+msgid "{target} already exists."
+msgstr "{target} ya existe."
