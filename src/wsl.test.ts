@@ -72,6 +72,34 @@ test('parseLxss survives a missing or unreadable key', () => {
         { defaultDistro: null, uids: {} })
 })
 
+test('parseLxss handles a value line with no body without derailing parsing', () => {
+    // reg.exe prints an empty REG_SZ with nothing after the type token — not even a
+    // trailing space. A block whose DistributionName line looks like that has no usable
+    // name and must not appear in uids, and the blocks before/after it must still parse.
+    const out = `
+HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Lxss
+    DefaultDistribution    REG_SZ    {bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb}
+
+HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Lxss\\{aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa}
+    State    REG_DWORD    0x1
+    DistributionName    REG_SZ
+    DefaultUid    REG_DWORD    0x0
+
+HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Lxss\\{bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb}
+    State    REG_DWORD    0x1
+    DistributionName    REG_SZ    Ubuntu
+    DefaultUid    REG_DWORD    0x3e8
+`
+    const info = parseLxss(out)
+    // The nameless block contributed nothing — only the named block after it shows up.
+    assert.deepEqual(Object.keys(info.uids), ['Ubuntu'])
+    // Parsing of the block AFTER the empty-value line was not derailed: its own
+    // DefaultUid is read correctly rather than being attributed to the wrong block.
+    assert.equal(info.uids.Ubuntu, 1000)
+    // The DefaultDistribution GUID (the block after the empty-name one) still resolves.
+    assert.equal(info.defaultDistro, 'Ubuntu')
+})
+
 test('homeFromPasswd finds the home directory for a uid', () => {
     const passwd = [
         'root:x:0:0:root:/root:/bin/bash',

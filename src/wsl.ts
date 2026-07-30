@@ -46,8 +46,8 @@ export function parseLxss (out: string): LxssInfo {
             current = blocks[raw.trim()] = {}
             continue
         }
-        const value = /^\s{4}(\S+)\s{4}(REG_\w+)\s{4}(.*)$/.exec(raw)
-        if (value && current) { current[value[1]] = value[3].trim() }
+        const value = /^\s{4}(\S+)\s{4}(REG_\w+)(?:\s{4}(.*))?$/.exec(raw)
+        if (value && current) { current[value[1]] = (value[3] ?? '').trim() }
     }
     const entries = Object.entries(blocks)
     const root = entries.find(([k]) => k.endsWith('\\Lxss'))
