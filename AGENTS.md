@@ -129,6 +129,23 @@ running Tabby. CI (`.github/workflows/ci.yml`) runs `npm ci` + `tsc --noEmit` + 
 Windows: `npm install` needs `.npmrc` `ignore-scripts=true` (tabby-ssh postinstall has
 no win32 script; deps are webpack-externalized so install scripts are unneeded anyway).
 
+**Every `peerDependencies` entry MUST also be `optional: true` in `peerDependenciesMeta`.**
+npm >= 7 auto-installs non-optional peers, and the plugin manager's install is a plain
+`npm`/Arborist reify into `userPluginsPath` with scripts ENABLED (no `.npmrc` of ours
+there). So a bare peer list made Tabby download the whole `tabby-core`/`tabby-ssh`/
+`tabby-settings`/Angular tree next to our `dist/`, and then `tabby-ssh`'s
+`postinstall: run-script-os` — which declares only `postinstall:darwin:linux` — failed on
+win32 with `run-script-os was unable to execute the script 'postinstall'`, aborting the
+whole install. Symptom: the plugin manager shows `Error in sftp-panel: [object Object]`
+(Tabby assigns the Error object straight to a string field, `pluginsSettingsTab.component.ts`),
+Linux installs fine. Optional peers are not auto-installed, so the tarball lands alone in
+about a second. Keeping them out matters beyond the crash: everything under
+`userPluginsPath` whose name starts with `tabby-` is scanned as a plugin (`app/src/plugins.ts`),
+so a downloaded `tabby-ssh` copy there is a second, wrong copy of a builtin. Regression check
+(NOT covered by CI, which installs with scripts off):
+`npm pack` then `npm install --ignore-scripts=false <tgz>` in an empty dir — it must add
+exactly 1 package.
+
 **`npm audit` noise is expected — do NOT "fix" it.** The package has zero `dependencies`
 (only dev + peer), so `npm audit --omit=dev` reports 0 — nothing vulnerable ever reaches
 a user, who gets only the bundled `dist/index.js`. The ~18 dev-only findings come from

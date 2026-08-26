@@ -32,6 +32,32 @@
     "tabby-ssh": "*",
     "tabby-settings": "*"
   },
+  "peerDependenciesMeta": {
+    "@angular/common": {
+      "optional": true
+    },
+    "@angular/core": {
+      "optional": true
+    },
+    "@angular/forms": {
+      "optional": true
+    },
+    "@ng-bootstrap/ng-bootstrap": {
+      "optional": true
+    },
+    "rxjs": {
+      "optional": true
+    },
+    "tabby-core": {
+      "optional": true
+    },
+    "tabby-ssh": {
+      "optional": true
+    },
+    "tabby-settings": {
+      "optional": true
+    }
+  },
   "devDependencies": {
     "@angular/common": "^15.2.6",
     "@angular/core": "^15.2.6",
